@@ -1,0 +1,37 @@
+*.jl.cov
+*.jl.*.cov
+*.gcov
+**/Manifest.toml
+**/Manifest-v*.toml
+/docs/Manifest.toml
+/benchmark/Manifest.toml
+/docs/build/
+/.temp/
+lcov.info
+
+# Third-party MATLAB toolboxes (GPL/BSD; fetched on demand for cross-validation
+# benchmarks, never vendored into this MIT-licensed repository).
+/benchmark/matlab/
+/matlab/ShearLab/
+/matlab/FFST/
+
+# Agentic tools
+.gemini
+.claude
+.copilot
+
+# Local benchmark scratch output
+/julia_bench.txt
+/matlab_bench.txt
+
+# GPUEnv persisted overlay environments
+/test/gpu_env/
+/benchmark/gpu_env/
+
+# AirspeedVelocity benchmark result artifacts
+/results_*.json
+/results_*.json.tmp
+
+# MATLAB cross-validation scratch outputs
+matlab/.ref/
+matlab/.verify/

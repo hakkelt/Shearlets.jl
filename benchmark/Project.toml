@@ -1,0 +1,13 @@
+[deps]
+BenchmarkTools = "6e4b80f9-dd63-53aa-95a3-0cdb28fa8baf"
+MultiscaleFilterBanks = "6efc46e8-ef8d-4233-93b5-7ad1cba20951"
+Random = "9a3f8284-a2c9-5f02-9a11-845980a1fd5c"
+Shearlets = "b326e8a5-2ab3-4089-8926-a9e1d7c4b91b"
+
+[sources]
+MultiscaleFilterBanks = {path = "../../MultiscaleFilterBanks"}
+Shearlets = {path = ".."}
+
+[compat]
+BenchmarkTools = "1"
+julia = "1.10"

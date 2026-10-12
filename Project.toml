@@ -1,0 +1,28 @@
+name = "Shearlets"
+uuid = "b326e8a5-2ab3-4089-8926-a9e1d7c4b91b"
+version = "0.1.0"
+authors = ["Tamás Hakkel"]
+
+[workspace]
+projects = ["test", "docs", "benchmark"]
+
+[deps]
+FFTW = "7a1cc6ca-52ef-59f5-83cd-3a7055c09341"
+LinearAlgebra = "37e2e46d-f89d-539d-b4ee-838fcccc9c8e"
+MultiscaleFilterBanks = "6efc46e8-ef8d-4233-93b5-7ad1cba20951"
+
+[weakdeps]
+Adapt = "79e6a3ab-5dfb-504d-930d-738a2a938a0e"
+
+[extensions]
+ShearletsAdaptExt = ["Adapt"]
+
+[sources]
+MultiscaleFilterBanks = {path = "../MultiscaleFilterBanks"}
+
+[compat]
+Adapt = "4"
+FFTW = "1"
+LinearAlgebra = "1"
+MultiscaleFilterBanks = "0.1"
+julia = "1.10"

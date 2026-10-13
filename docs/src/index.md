@@ -39,7 +39,7 @@ shearlet_inverse!(x, c, sys; workspace = ws)
 ```
 
 The subbands are computed in parallel over Julia's threads unless
-`threading = Disabled()`. For data too large to hold every subband,
+`threaded = false`. For data too large to hold every subband,
 `shearlet_forward(f, x, sys)` streams them to `f(i, band)` one at a time.
 
 ## GPU

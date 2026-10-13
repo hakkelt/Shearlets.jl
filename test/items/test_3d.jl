@@ -65,8 +65,8 @@ end
         ws = make_shearlet_workspace(Float64, size(x), sys)
         c = shearlet_forward(x, sys; workspace = ws)
         y = similar(x)
-        fwd(c, x, sys, ws) = @allocated shearlet_forward!(c, x, sys; workspace = ws, threading = Disabled())
-        inv(y, c, sys, ws) = @allocated shearlet_inverse!(y, c, sys; workspace = ws, threading = Disabled())
+        fwd(c, x, sys, ws) = @allocated shearlet_forward!(c, x, sys; workspace = ws, threaded = false)
+        inv(y, c, sys, ws) = @allocated shearlet_inverse!(y, c, sys; workspace = ws, threaded = false)
         fwd(c, x, sys, ws), inv(y, c, sys, ws)
         @test fwd(c, x, sys, ws) == 0
         @test inv(y, c, sys, ws) == 0

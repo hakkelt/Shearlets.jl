@@ -37,7 +37,7 @@ function Adapt.adapt_structure(to, ws::ShearletWorkspace{Td, Tf, N}) where {Td, 
         ms.groups, _adapt_shared(to, ms.post, cache),
     )
     proto = Adapt.adapt(to, Array{Tf, N}(undef, ntuple(_ -> 0, N)))
-    nt = Shearlets._n_tasks(proto, length(ms.ana))
+    nt = Shearlets.n_tasks(proto, length(ms.ana))
     return Shearlets._assemble_workspace(ws.system, ws.dims, Td, masks, proto, nt) do rbuf, buf
         Shearlets.plan_rfft(rbuf), Shearlets.plan_brfft(buf, ws.dims[1])
     end

@@ -27,12 +27,12 @@
         ws = make_shearlet_workspace(Float64, dims, sys)
         @test_call target_modules = M shearlet_forward(x, sys)
         @test_call target_modules = M shearlet_forward(x, sys; workspace = ws)
-        @test_call target_modules = M shearlet_forward(x, sys; threading = Disabled())
+        @test_call target_modules = M shearlet_forward(x, sys; threaded = false)
         c = shearlet_forward(x, sys; workspace = ws)
         y = similar(x)
         @test_call target_modules = M shearlet_forward!(c, x, sys; workspace = ws)
         @test_call target_modules = M shearlet_inverse(c, sys)
-        @test_call target_modules = M shearlet_inverse(c, sys; workspace = ws, threading = Enabled())
+        @test_call target_modules = M shearlet_inverse(c, sys; workspace = ws, threaded = true)
         @test_call target_modules = M shearlet_inverse!(y, c, sys; workspace = ws)
 
         # ── Streaming forms ──────────────────────────────────────────────────

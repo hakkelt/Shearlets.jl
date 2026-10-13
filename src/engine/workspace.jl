@@ -9,9 +9,9 @@
 # ones.  The spectra of the channels are stacked along a trailing axis.
 #
 # The subbands (groups) are independent, so both passes split them into
-# contiguous chunks, one task per FFT buffer (`MultiscaleFilterBanks._foreach_chunk`);
+# contiguous chunks, one task per FFT buffer (`MultiscaleFilterBanks.foreach_chunk`);
 # the synthesis gives each task after the first its own partial sum
-# (`_chunked_sum!`).  FFT plans are single-threaded.
+# (`chunked_sum!`).  FFT plans are single-threaded.
 
 """
     ShearletWorkspace{Td, Tf, N}
@@ -51,7 +51,7 @@ _nchannels(::ShearletWorkspace{Td}) where {Td} = _nchannels(Td)
 _ntasks(ws::ShearletWorkspace) = length(ws.bufs)
 _nsubbands(ws::ShearletWorkspace) = length(ws.masks.ana)
 # Whether a call threads: asked to, and not inside a caller's NestedThreading budget.
-_threaded(threading::ThreadingPolicy) = _loop_threaded(!(threading isa Disabled))
+_threaded(threaded::Union{Bool, Nothing}) = loop_threaded(threaded !== false)
 
 """
     make_shearlet_workspace(T, dims, system; flags = FFTW.MEASURE) -> ShearletWorkspace
@@ -68,12 +68,12 @@ function _make_workspace(::Type{T}, dims::NTuple{N, Int}, sys::ShearletSystem, f
     Td = float(T)
     masks = _system_masks(sys, dims, real(Td))
     proto = Array{real(Td), N}(undef, ntuple(_ -> 0, N))
-    nt = threaded ? _n_tasks(proto, length(masks.ana)) : 1
+    nt = threaded ? n_tasks(proto, length(masks.ana)) : 1
     return _assemble_workspace(sys, dims, Td, masks, proto, nt) do rbuf, buf
         # FFTW's own threads off: the engine threads over subbands instead.  The
         # plans assume aligned arrays (`UNALIGNED` costs 1.3–1.8×); `_plannable`
         # routes any other array through an aligned buffer.
-        _with_fftw_threads(1) do
+        with_fftw_threads(1) do
             plan_rfft(rbuf; flags), plan_brfft(buf, dims[1]; flags)
         end
     end
@@ -174,7 +174,7 @@ function _engine_forward!(target::F, emit::G, x::AbstractArray, ws::ShearletWork
     end
     s = ws.scale
     ana = ws.masks.ana
-    _foreach_chunk(length(ana), _ntasks(ws), threaded) do range, t
+    foreach_chunk(length(ana), _ntasks(ws), threaded) do range, t
         Z, Zv = ws.bufs[t], ws.bufs_v[t]
         for i in range
             for c in 1:nch
@@ -198,7 +198,7 @@ function _engine_inverse!(source::S, x::AbstractArray, ws::ShearletWorkspace{Td,
     fill!(ws.X, zero(eltype(ws.X)))
     # Fewer groups than tasks: the idle tasks need no partial sums.
     partials = view(ws.partials, 1:(min(_ntasks(ws), ng) - 1))
-    _chunked_sum!(ws.X, partials, ng, threaded) do a, range, t
+    chunked_sum!(ws.X, partials, ng, threaded) do a, range, t
         am = t == 1 ? ws.Xm : ws.partials_m[t - 1]
         F, Fv = ws.bufs[t], ws.bufs_v[t]
         rbs = ws.rbufs[t]

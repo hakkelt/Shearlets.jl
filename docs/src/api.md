@@ -41,10 +41,6 @@ make_shearlet_workspace
 ```@docs
 FilterPair
 CDF97
-ThreadingPolicy
-Auto
-Enabled
-Disabled
 ```
 
 ## Other MultiscaleFilterBanks utilities

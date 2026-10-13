@@ -33,8 +33,8 @@ using LinearAlgebra: mul!
 using FastBroadcast: @..
 
 using MultiscaleFilterBanks: MultiscaleFilterBanks,
-    FilterPair, CDF97, ThreadingPolicy, Auto, Enabled, Disabled, upsample_filter,
-    _data_eltype, _n_tasks, _foreach_chunk, _chunked_sum!, _loop_threaded, _with_fftw_threads, _nsp_responses
+    FilterPair, CDF97, upsample_filter,
+    data_eltype, n_tasks, foreach_chunk, chunked_sum!, loop_threaded, with_fftw_threads, nsp_responses
 
 # ── Types ─────────────────────────────────────────────────────────────────────
 include("types/index.jl")
@@ -55,7 +55,7 @@ include("transforms/shearlet.jl")
 
 export
     # Re-exported from MultiscaleFilterBanks
-    FilterPair, CDF97, ThreadingPolicy, Auto, Enabled, Disabled,
+    FilterPair, CDF97,
 
     # Systems and indexing
     ShearletSystem, BandlimitedShearlets, NSSTShearlets, CompactShearlets, ShearletIndex, islowpass,

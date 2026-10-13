@@ -24,5 +24,5 @@ for (name, sys, dims) in CASES, T in (Float32, ComplexF32)
     g = SUITE[name][string(T)] = BenchmarkGroup()
     g["forward"] = @benchmarkable shearlet_forward!($c, $x, $sys; workspace = $ws)
     g["inverse"] = @benchmarkable shearlet_inverse!($y, $c, $sys; workspace = $ws)
-    g["forward_serial"] = @benchmarkable shearlet_forward!($c, $x, $sys; workspace = $ws, threading = Disabled())
+    g["forward_serial"] = @benchmarkable shearlet_forward!($c, $x, $sys; workspace = $ws, threaded = false)
 end

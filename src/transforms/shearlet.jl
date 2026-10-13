@@ -26,13 +26,13 @@ function _check_coefficients(coeffs::AbstractArray, ws::ShearletWorkspace)
 end
 
 """
-    shearlet_forward(x, system::ShearletSystem; workspace = nothing, threading = Auto()) -> Array
+    shearlet_forward(x, system::ShearletSystem; workspace = nothing, threaded = nothing) -> Array
 
 Shearlet transform of `x`: an array of size `(size(x)..., n)` whose slice `i`
 along the last axis is the subband `shearlet_layout(system, size(x))[i]` (the
 lowpass first).  The transform is invariant under circular shifts of `x`;
 real input gives real subbands.  The subbands are computed in parallel unless
-`threading = Disabled()`.
+`threaded = false`.
 
 # Examples
 ```jldoctest
@@ -51,30 +51,30 @@ true
 """
 function shearlet_forward(
         x::AbstractArray{<:Number}, sys::ShearletSystem;
-        workspace::Union{ShearletWorkspace, Nothing} = nothing, threading::ThreadingPolicy = Auto()
+        workspace::Union{ShearletWorkspace, Nothing} = nothing, threaded::Union{Bool, Nothing} = nothing
     )
     _check_host(workspace, x)
-    Td = _data_eltype(x)
-    ws = _workspace(workspace, sys, size(x), Td, _threaded(threading))
+    Td = data_eltype(x)
+    ws = _workspace(workspace, sys, size(x), Td, _threaded(threaded))
     coeffs = similar(x, Td, _coefficient_size(ws))
-    return shearlet_forward!(coeffs, x, sys; workspace = ws, threading = threading)
+    return shearlet_forward!(coeffs, x, sys; workspace = ws, threaded = threaded)
 end
 
 """
-    shearlet_forward!(coeffs, x, system::ShearletSystem; workspace = nothing, threading = Auto()) -> coeffs
+    shearlet_forward!(coeffs, x, system::ShearletSystem; workspace = nothing, threaded = nothing) -> coeffs
 
 In-place [`shearlet_forward`](@ref).  With a `workspace` it allocates nothing
 but the threads' tasks.
 """
 function shearlet_forward!(
         coeffs::AbstractArray{<:Number}, x::AbstractArray{<:Number}, sys::ShearletSystem;
-        workspace::Union{ShearletWorkspace, Nothing} = nothing, threading::ThreadingPolicy = Auto()
+        workspace::Union{ShearletWorkspace, Nothing} = nothing, threaded::Union{Bool, Nothing} = nothing
     )
     _check_host(workspace, x)
-    threaded = _threaded(threading)
-    ws = _workspace(workspace, sys, size(x), _data_eltype(x), threaded)
+    use_threads = _threaded(threaded)
+    ws = _workspace(workspace, sys, size(x), data_eltype(x), use_threads)
     _check_coefficients(coeffs, ws)
-    _forward_into!(coeffs, x, ws, threaded)
+    _forward_into!(coeffs, x, ws, use_threads)
     return coeffs
 end
 
@@ -106,7 +106,7 @@ function shearlet_forward(
         workspace::Union{ShearletWorkspace, Nothing} = nothing
     )
     _check_host(workspace, x)
-    Td = _data_eltype(x)
+    Td = data_eltype(x)
     ws = _workspace(workspace, sys, size(x), Td, false)
     out = Td <: Real ? nothing : similar(x, Td)
     target(i, t, c) = ws.rbufs[t][c]
@@ -116,7 +116,7 @@ function shearlet_forward(
 end
 
 """
-    shearlet_inverse(coeffs, system::ShearletSystem; workspace = nothing, threading = Auto()) -> Array
+    shearlet_inverse(coeffs, system::ShearletSystem; workspace = nothing, threaded = nothing) -> Array
 
 Invert [`shearlet_forward`](@ref).  For a Parseval system such as
 [`BandlimitedShearlets`](@ref) this is also the adjoint of the forward
@@ -124,30 +124,30 @@ transform.
 """
 function shearlet_inverse(
         coeffs::AbstractArray{<:Number}, sys::ShearletSystem;
-        workspace::Union{ShearletWorkspace, Nothing} = nothing, threading::ThreadingPolicy = Auto()
+        workspace::Union{ShearletWorkspace, Nothing} = nothing, threaded::Union{Bool, Nothing} = nothing
     )
     N = ndims(coeffs) - 1
-    x = similar(coeffs, _data_eltype(coeffs), ntuple(d -> size(coeffs, d), N))
-    return shearlet_inverse!(x, coeffs, sys; workspace = workspace, threading = threading)
+    x = similar(coeffs, data_eltype(coeffs), ntuple(d -> size(coeffs, d), N))
+    return shearlet_inverse!(x, coeffs, sys; workspace = workspace, threaded = threaded)
 end
 
 """
-    shearlet_inverse!(x, coeffs, system::ShearletSystem; workspace = nothing, threading = Auto()) -> x
+    shearlet_inverse!(x, coeffs, system::ShearletSystem; workspace = nothing, threaded = nothing) -> x
 
 In-place [`shearlet_inverse`](@ref).
 """
 function shearlet_inverse!(
         x::AbstractArray{<:Number}, coeffs::AbstractArray{<:Number}, sys::ShearletSystem;
-        workspace::Union{ShearletWorkspace, Nothing} = nothing, threading::ThreadingPolicy = Auto()
+        workspace::Union{ShearletWorkspace, Nothing} = nothing, threaded::Union{Bool, Nothing} = nothing
     )
     _check_host(workspace, x)
     _check_host(workspace, coeffs)
-    _data_eltype(x) <: Real && _data_eltype(coeffs) <: Complex &&
+    data_eltype(x) <: Real && data_eltype(coeffs) <: Complex &&
         throw(ArgumentError("complex coefficients need a complex output, got $(eltype(x))"))
-    threaded = _threaded(threading)
-    ws = _workspace(workspace, sys, size(x), _data_eltype(x), threaded)
+    use_threads = _threaded(threaded)
+    ws = _workspace(workspace, sys, size(x), data_eltype(x), use_threads)
     _check_coefficients(coeffs, ws)
-    return _engine_inverse!(i -> _band(coeffs, i), x, ws, threaded)
+    return _engine_inverse!(i -> _band(coeffs, i), x, ws, use_threads)
 end
 
 """

@@ -16,9 +16,8 @@ Unlike the contourlet / surfacelet split, one package covers both dimensions:
 the cone-adapted construction is the same in 2-D and 3-D (two cones, three
 pyramids), with no lattice that only exists in the plane.
 
-The surface shared with the core: `FilterPair`, `CDF97`, the threading policy
-types, and the internals `_data_eltype`, `_n_tasks`, `_foreach_chunk`, `_chunked_sum!`,
-`_loop_threaded`, `_with_fftw_threads`, `upsample_filter` and `_nsp_responses` (the NSST pyramid), imported in
+The surface shared with the core: `FilterPair`, `CDF97`, and the internals `data_eltype`, `n_tasks`, `foreach_chunk`, `chunked_sum!`,
+`loop_threaded`, `with_fftw_threads`, `upsample_filter` and `nsp_responses` (the NSST pyramid), imported in
 `src/Shearlets.jl`.
 
 **First checkout**: `MultiscaleFilterBanks.jl` is unregistered and expected as a
@@ -70,12 +69,12 @@ FFT. The pieces:
 - **Complex data are two real channels** through the same masks, so the
   transform is real-linear bit for bit: `T(a + ib) == T(a) + iT(b)`.
 - **Workspace paths allocate nothing**: `shearlet_forward!` / `shearlet_inverse!`
-  with a workspace and `threading = Disabled()` are tested with `@allocated == 0`.
+  with a workspace and `threaded = false` are tested with `@allocated == 0`.
   Linear indexing into a matrix view reshapes its parent and allocates — use the
   `bufs_v` vector aliases.
 - **No scalar indexing in the mask kernels** (`_mask_apply!`, `_mask_accumulate!`):
   they are broadcasts, so the device path needs no kernels.
-- **Never call `FFTW.set_num_threads`**: plan inside `_with_fftw_threads`.
+- **Never call `FFTW.set_num_threads`**: plan inside `with_fftw_threads`.
 - **Formatting**: `runic --inplace src ext test`, then
   `JULIA_LOAD_PATH="@relint:@stdlib" julia --startup-file=no scripts/relint.jl src/`.
 
@@ -94,7 +93,7 @@ FFT. The pieces:
   The default QMF is MATLAB's `maxflat` design (taps from MATLAB itself); the
   fan is da Cunha et al.'s maximally flat order-4 fan (Table II), which is not
   the toolbox's `dmaxflat4`.
-- **Its own single-stage engine, not MultiscaleFilterBanks' `_MaskBankEngine`.**
+- **Its own single-stage engine, not MultiscaleFilterBanks' `MaskBankEngine`.**
   The shared engine is two-stage (pyramid mask × bank channel, dense complex
   masks). Band-limited masks are compactly supported in frequency and stored
   sparsely — dense complex masks would take ~25× the memory — and 3-D compact

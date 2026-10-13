@@ -107,12 +107,12 @@ end
     ws = make_shearlet_workspace(Float64, dims, sys)
     c = shearlet_forward(x, sys; workspace = ws)
     @test c == shearlet_forward(x, sys)
-    for threading in (Disabled(), Enabled())
+    for threaded in (false, true)
         c2 = similar(c)
-        shearlet_forward!(c2, x, sys; workspace = ws, threading = threading)
+        shearlet_forward!(c2, x, sys; workspace = ws, threaded = threaded)
         @test c2 == c
         y = similar(x)
-        shearlet_inverse!(y, c, sys; workspace = ws, threading = threading)
+        shearlet_inverse!(y, c, sys; workspace = ws, threaded = threaded)
         @test y ≈ x atol = 1.0e-12
     end
     # Streaming: the same subbands, one at a time.
@@ -148,8 +148,8 @@ end
     ws = make_shearlet_workspace(Float64, size(x), sys)
     c = shearlet_forward(x, sys; workspace = ws)
     y = similar(x)
-    fwd(c, x, sys, ws) = @allocated shearlet_forward!(c, x, sys; workspace = ws, threading = Disabled())
-    inv(y, c, sys, ws) = @allocated shearlet_inverse!(y, c, sys; workspace = ws, threading = Disabled())
+    fwd(c, x, sys, ws) = @allocated shearlet_forward!(c, x, sys; workspace = ws, threaded = false)
+    inv(y, c, sys, ws) = @allocated shearlet_inverse!(y, c, sys; workspace = ws, threaded = false)
     fwd(c, x, sys, ws), inv(y, c, sys, ws)
     @test fwd(c, x, sys, ws) == 0
     @test inv(y, c, sys, ws) == 0

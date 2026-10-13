@@ -13,7 +13,7 @@
 # taps on the image grid; with `filter_size = 0` it is instead sampled on the
 # image grid directly (the paper's frequency-domain implementation, §3.1).
 #
-# The pyramid is MultiscaleFilterBanks' à trous pyramid (`_nsp_responses`, the
+# The pyramid is MultiscaleFilterBanks' à trous pyramid (`nsp_responses`, the
 # one the NSCT uses).  On the DFT grid, the subband of level j and window k is
 #
 #     irfft(B_j · W_{j,k} · X),        B_j = (Π_{i<j} H_i)(1 − G_j H_j),
@@ -139,8 +139,8 @@ end
 function _shearlet_masks(sys::NSSTShearlets, dims::NTuple{2, Int}, ::Type{Tf}) where {Tf}
     J = length(sys.directions)
     rd = _rfft_dims(dims)
-    a1, gh1, s1 = _nsp_responses(sys.pyramid, J, dims[1]; bins = 1:rd[1])
-    a2, gh2, s2 = _nsp_responses(sys.pyramid, J, dims[2])
+    a1, gh1, s1 = nsp_responses(sys.pyramid, J, dims[1]; bins = 1:rd[1])
+    a2, gh2, s2 = nsp_responses(sys.pyramid, J, dims[2])
     realpart(z) = (maximum(abs ∘ imag, z) < 1.0e-10 || throw(ArgumentError("the pyramid response is not real")); real.(z))
     sep(u, v) = vec(realpart(u .* transpose(v)))
     ana = [_DenseMask(Tf.(sep(a1[J + 1], a2[J + 1])))]

@@ -30,10 +30,11 @@ module Shearlets
 
 using FFTW: FFTW, plan_rfft, plan_brfft
 using LinearAlgebra: mul!
+using FastBroadcast: @..
 
 using MultiscaleFilterBanks: MultiscaleFilterBanks,
-    FilterPair, CDF97, ThreadingPolicy, Auto, Enabled, Disabled,
-    _data_eltype, _foreach_chunk, _chunked_sum!, _with_fftw_threads, _nsp_responses
+    FilterPair, CDF97, ThreadingPolicy, Auto, Enabled, Disabled, upsample_filter,
+    _data_eltype, _n_tasks, _foreach_chunk, _chunked_sum!, _loop_threaded, _with_fftw_threads, _nsp_responses
 
 # ── Types ─────────────────────────────────────────────────────────────────────
 include("types/index.jl")

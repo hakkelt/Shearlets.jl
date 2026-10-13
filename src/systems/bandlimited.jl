@@ -125,32 +125,53 @@ end
 _bl_lowpass(sys::BandlimitedShearlets, ω::NTuple{N, Float64}) where {N} =
     sys.smooth ? prod(d -> _meyer_phi(ω[d]), 1:N) : _meyer_phi(maximum(abs, ω))
 
+# The dominant axis of the frequency ω (the lowest on ties) and the slopes
+# ω_e / ω_c of the other axes against it.
+function _cone_slopes(ω::NTuple{N, Float64}) where {N}
+    cone = argmax(abs.(ω))
+    wc = ω[cone]
+    return cone, ntuple(i -> (e = i < cone ? i : i + 1; wc == 0 ? 0.0 : ω[e] / wc), Val(N - 1))
+end
+
+# v[i0 + n] = w · Πₑ ψ̂₂(s rₑ + kₑ) for the n-th element of `members` (its shears
+# k in each cone, see `_bl_scale_elements`), at the slopes r of cone `cone`.
+function _angular_windows!(v, i0::Int, members::Vector, cone::Int, r::NTuple{M, Float64}, s::Int, w::Float64) where {M}
+    for (n, m) in enumerate(members)
+        k = m[cone]
+        v[i0 + n] = k === nothing ? 0.0 : w * prod(e -> _meyer_psi2(s * r[e] + k[e]), 1:M)
+    end
+    return v
+end
+
 function _shearlet_masks(sys::BandlimitedShearlets, dims::NTuple{N, Int}, ::Type{Tf}) where {N, Tf}
-    layout = shearlet_layout(sys, dims)
     J = _nscales(sys, dims)
     X = 2.0^(2J - 1)
     scale = ntuple(d -> X / (dims[d] / 2), Val(N))
     shears = [_bl_shears(sys, j) for j in 1:J]
-    # Per scale, the shears of every element in each cone, in layout order.
+    # Per scale, the shears of every element in each cone, in layout order, and
+    # the index before its first element.
     members = [[m for (_, _, m) in _bl_scale_elements(Val(N), shears[j])] for j in 1:J]
-    radial = zeros(J)
+    offsets = cumsum([1; length.(members)])
+    R = zeros(J)
+    # Only the scales whose radial window reaches ω are evaluated (one or two).
     function evaluate!(v, f)
         ω = ntuple(d -> f[d] * scale[d], Val(N))
-        cone = argmax(abs.(ω))           # the lowest axis on ties
-        wc = ω[cone]
-        r = ntuple(i -> (e = i < cone ? i : i + 1; wc == 0 ? 0.0 : ω[e] / wc), Val(N - 1))
+        cone, r = _cone_slopes(ω)
         v[1] = _bl_lowpass(sys, ω)
-        i = 1
+        lo, hi = v[1] > 0 ? (1, 1) : (0, 0)
         for j in 1:J
-            R = _bl_radial(sys, ω, j)
-            s = shears[j]
-            for m in members[j]
-                i += 1
-                k = m[cone]
-                v[i] = (R == 0 || k === nothing) ? 0.0 : R * prod(e -> _meyer_psi2(s * r[e] + k[e]), 1:(N - 1))
-            end
+            R[j] = _bl_radial(sys, ω, j)
+            R[j] > 0 || continue
+            lo == 0 && (lo = offsets[j] + 1)
+            hi = offsets[j + 1]
         end
-        return v
+        lo == 0 && return 1:0
+        for j in 1:J
+            # Scales inside the range with R = 0 are written as zeros.
+            offsets[j + 1] < lo || offsets[j] >= hi ||
+                _angular_windows!(v, offsets[j], members[j], cone, r, shears[j], R[j])
+        end
+        return lo:hi
     end
-    return layout, _pointwise_masks(evaluate!, length(layout), dims, Tf)
+    return _MaskSet(_pointwise_masks(evaluate!, offsets[end], dims, Tf))
 end

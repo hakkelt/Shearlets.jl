@@ -108,18 +108,11 @@ CompactShearlets(;
 Base.:(==)(a::CompactShearlets, b::CompactShearlets) =
     a.scales == b.scales && a.shear_levels == b.shear_levels && a.qmf == b.qmf && a.fan == b.fan
 
-function shearlet_layout(sys::CompactShearlets, ::NTuple{2, Int})
-    layout = [_lowpass_index(Val(2))]
-    for (ℓ, d) in enumerate(sys.shear_levels), cone in 1:2, k in -(2^d):(2^d)
-        push!(layout, ShearletIndex{1}(ℓ, cone, (k,)))
-    end
-    return layout
-end
-
-function shearlet_layout(sys::CompactShearlets, ::NTuple{3, Int})
-    layout = [_lowpass_index(Val(3))]
-    for (ℓ, d) in enumerate(sys.shear_levels), cone in 1:3, k2 in -(2^d):(2^d), k1 in -(2^d):(2^d)
-        push!(layout, ShearletIndex{2}(ℓ, cone, (k1, k2)))
+function shearlet_layout(sys::CompactShearlets, dims::NTuple{N, Int}) where {N}
+    N in (2, 3) || throw(ArgumentError("compactly supported shearlets support 2-D and 3-D data, got size $(dims)"))
+    layout = [_lowpass_index(Val(N))]
+    for (ℓ, d) in enumerate(sys.shear_levels), cone in 1:N, kI in CartesianIndices(ntuple(_ -> -(2^d):(2^d), Val(N - 1)))
+        push!(layout, ShearletIndex{N - 1}(ℓ, cone, Tuple(kI)))
     end
     return layout
 end
@@ -149,12 +142,16 @@ function _downsample(a::AbstractArray, r::Int, dim::Int)
     return copy(selectdim(a, dim, (c - m * r):r:(c + m * r)))
 end
 
-# Full linear convolution of two centred arrays of the same dimension.
+# Full linear convolution of two centred arrays of the same dimension, by real
+# FFTs of a size with small prime factors (these sizes are otherwise arbitrary,
+# and an FFT of a large prime size is several times slower).
 function _conv(a::AbstractArray, b::AbstractArray)
     sz = size(a) .+ size(b) .- 1
-    pa = zeros(sz); pa[CartesianIndices(size(a))] .= a
-    pb = zeros(sz); pb[CartesianIndices(size(b))] .= b
-    return real.(FFTW.ifft(FFTW.fft(pa) .* FFTW.fft(pb)))
+    n = map(m -> nextprod((2, 3, 5), m), sz)
+    pa = zeros(n); pa[CartesianIndices(size(a))] .= a
+    pb = zeros(n); pb[CartesianIndices(size(b))] .= b
+    full = FFTW.irfft(FFTW.rfft(pa) .* FFTW.rfft(pb), n[1])
+    return full[CartesianIndices(sz)]
 end
 
 # A 1-D filter oriented along `dim` of an N-dimensional array.
@@ -164,7 +161,7 @@ _along(f::AbstractVector, dim::Int, N::Int) = reshape(f, ntuple(d -> d == dim ? 
 function _atrous_lowpass(h::Vector{Float64}, j::Int)
     out = [1.0]
     for k in 0:(j - 1)
-        out = _conv(out, _upsample(h, 2^k, 1))
+        out = _conv(out, upsample_filter(h, 2^k))
     end
     return out
 end
@@ -174,81 +171,77 @@ end
 function _atrous_highpass(h::Vector{Float64}, j::Int)
     c = _centre(length(h))
     g = [(-1)^(n - c) * h[n] for n in eachindex(h)]
-    return _conv(_upsample(g, 2^(j - 1), 1), _atrous_lowpass(h, j - 1))
+    return _conv(upsample_filter(g, 2^(j - 1)), _atrous_lowpass(h, j - 1))
 end
 
-# The digital shear S_{k/2^d} of a 2-D filter across axis 1 (eqs. 21–22): refine
-# axis 1 by r = 2^d with the interpolator h_d, apply the integer shear
-# (n₁, n₂) ↦ (n₁ + k n₂, n₂) on the refined grid, filter with h_d again and
-# return to the original grid.
-function _digital_shear(f::Matrix{Float64}, k::Int, d::Int, h::Vector{Float64})
+# The digital shears S_{k/2^d}, k = -2^d, …, 2^d, of a 2-D filter across axis 1
+# (eqs. 21–22): refine axis 1 by r = 2^d with the interpolator h_d, apply the
+# integer shear (n₁, n₂) ↦ (n₁ − k n₂, n₂) on the refined grid, filter with h_d
+# again and return to the original grid.  Shear k sends the passband to the
+# slope ω₂/ω₁ = −k/2^d, as in the other systems.
+function _digital_shears(f::Matrix{Float64}, d::Int, h::Vector{Float64})
     r = 2^d
     hd = _atrous_lowpass(h, d)
     fine = _conv(_upsample(f, r, 1), _along(r .* hd, 1, 2))
     n1, n2 = size(fine)
     c1, c2 = _centre(n1), _centre(n2)
-    pad = abs(k) * (c2 - 1)
-    out = zeros(n1 + 2pad, n2)
-    co = c1 + pad
-    for j in 1:n2, i in 1:n1
-        # out[o₁, o₂] = fine[o₁ + k o₂, o₂]: the sheared filter's offsets.
-        out[co + (i - c1) - k * (j - c2), j] = fine[i, j]
+    return map(-r:r) do k
+        pad = abs(k) * (c2 - 1)
+        out = zeros(n1 + 2pad, n2)
+        co = c1 + pad
+        for j in 1:n2, i in 1:n1
+            # out[o₁, o₂] = fine[o₁ − k o₂, o₂]: the sheared filter's offsets.
+            out[co + (i - c1) + k * (j - c2), j] = fine[i, j]
+        end
+        _downsample(_conv(out, _along(hd, 1, 2)), r, 1)
     end
-    return _downsample(_conv(out, _along(hd, 1, 2)), r, 1)
 end
 
-# Fold a centred filter onto the periodic grid `dims` (offset o ↦ o mod n).
-function _fold(f::AbstractMatrix, dims::NTuple{2, Int})
-    out = zeros(dims)
-    c1, c2 = _centre(size(f, 1)), _centre(size(f, 2))
-    for j in axes(f, 2), i in axes(f, 1)
-        out[mod(i - c1, dims[1]) + 1, mod(j - c2, dims[2]) + 1] += f[i, j]
+# The real frequency response of a centred, point-symmetric filter on a DFT grid
+# of size `n` (one entry per axis of `f`): the filter folded onto the periodic
+# grid (offset o ↦ o mod n) and transformed, with its axis `h` halved as by
+# `rfft` (`h = 0`: none).
+function _centred_response(f::AbstractArray, n::Tuple, h::Int)
+    folded = zeros(n)
+    c = _centre.(size(f))
+    for I in CartesianIndices(f)
+        folded[CartesianIndex(ntuple(a -> mod(I[a] - c[a], n[a]) + 1, Val(ndims(f))))] += f[I]
     end
-    return out
-end
-
-# The real frequency response of a point-symmetric filter on the `rfft` grid of
-# `dims`, as a vector over its linear indices.
-function _filter_mask(f::AbstractMatrix, dims::NTuple{2, Int})
-    F = FFTW.rfft(_fold(f, dims))
+    F = h == 0 ? FFTW.fft(folded) : FFTW.rfft(folded, (h, (a for a in 1:length(n) if a != h)...))
     maximum(abs ∘ imag, F) <= 1.0e-9 * max(1.0, maximum(abs, F)) ||
         throw(ArgumentError("shearlet filter is not point-symmetric"))
-    return vec(real.(F))
+    return real.(F)
 end
 
-# The unsheared filter ψ_ℓ = p_ℓ ∗ (g_{J+1−ℓ} ⊗ h_{J+1−ℓ+d}) of scale ℓ.
-function _compact_generator(sys::CompactShearlets, ℓ::Int)
+# The 2-D wedge of scale ℓ before shearing: p_ℓ ∗ (δ ⊗ h_{J+1−ℓ+d}).
+function _compact_wedge(sys::CompactShearlets, ℓ::Int)
     J, d, h = sys.scales, sys.shear_levels[ℓ], sys.qmf
-    g1 = _atrous_highpass(h, J + 1 - ℓ)
-    h2 = _atrous_lowpass(h, J + 1 - ℓ + d)
     p = _upsample(_upsample(sys.fan, 2^(J - ℓ), 1), 2^(J + 1 - ℓ + d), 2)
-    return _conv(p, g1 .* transpose(h2))
+    return _conv(p, transpose(_atrous_lowpass(h, J + 1 - ℓ + d)))
 end
 
-# Analysis responses of the shearlets of `sys` on `dims` (`rfft` grid vectors) in
-# `shearlet_layout` order.
-function _compact_responses(sys::CompactShearlets, dims::NTuple{2, Int})
-    hJ = _atrous_lowpass(sys.qmf, sys.scales)
-    responses = [_filter_mask(hJ .* transpose(hJ), dims)]
-    for (ℓ, d) in enumerate(sys.shear_levels)
-        ψ = _compact_generator(sys, ℓ)
-        # Shear k sends the passband to the slope ω₂/ω₁ = −k/2^d, as in the other
-        # systems: the digital shear by −k.
-        sheared = [_digital_shear(ψ, -k, d, sys.qmf) for k in -(2^d):(2^d)]
-        # Cone 1 shears across axis 1; cone 2 is its transpose.
-        append!(responses, _filter_mask(f, dims) for f in sheared)
-        append!(responses, _filter_mask(permutedims(f), dims) for f in sheared)
-    end
-    return responses
+# The dual frame: the synthesis divides by Ψ̂ = Σ |ψ̂|² over all filters, applied
+# once to the synthesis sum.
+function _compact_post(den::AbstractArray, dims::Tuple, ::Type{Tf}) where {Tf}
+    minimum(den) > 0 || throw(ArgumentError("the shearlet filters do not cover every frequency of a $(dims) grid"))
+    return Tf.(1 ./ den)
 end
 
+# Two dimensions: the shearlets of scale ℓ are the digital shears of the
+# generator ψ_ℓ = p_ℓ ∗ (g_{J+1−ℓ} ⊗ h_{J+1−ℓ+d}), the wedge times the wavelet
+# across the cone; cone 2 is the transpose of cone 1.
 function _shearlet_masks(sys::CompactShearlets, dims::NTuple{2, Int}, ::Type{Tf}) where {Tf}
-    layout = shearlet_layout(sys, dims)
-    ana = _compact_responses(sys, dims)
-    # Dual filters: γ̂ = ψ̂ / Σ|ψ̂|².
-    Ψ = sum(a -> a .^ 2, ana)
-    minimum(Ψ) > 0 || throw(ArgumentError("the shearlet filters do not cover every frequency of a $(dims) grid"))
-    return layout, [_DenseMask(Tf.(a), Tf.(a ./ Ψ)) for a in ana]
+    J, h = sys.scales, sys.qmf
+    hJ = _atrous_lowpass(h, J)
+    responses = [_centred_response(hJ .* transpose(hJ), dims, 1)]
+    for ℓ in 1:J
+        ψ = _conv(_compact_wedge(sys, ℓ), _along(_atrous_highpass(h, J + 1 - ℓ), 1, 2))
+        sheared = _digital_shears(ψ, sys.shear_levels[ℓ], h)
+        append!(responses, _centred_response(f, dims, 1) for f in sheared)
+        append!(responses, _centred_response(permutedims(f), dims, 1) for f in sheared)
+    end
+    post = _compact_post(sum(a -> a .^ 2, responses), dims, Tf)
+    return _MaskSet([_DenseMask(Tf.(vec(a))) for a in responses]; post)
 end
 
 # ── Three dimensions ─────────────────────────────────────────────────────────
@@ -258,73 +251,45 @@ end
 #     ψ̂(ξ) = ĝ_{J+1−ℓ}(ξ_c) · Φ̂_{k₁}(ξ_c, ξ_{e₁}) · Φ̂_{k₂}(ξ_c, ξ_{e₂}),
 #
 # where Φ_k = S_{k/2^d}(p_ℓ ∗_{x₂} h_{J+1−ℓ+d}) is the 2-D wedge of the planar
-# construction without its wavelet, digitally sheared.  The three factors are
-# kept apart (`_ProductMask`): a full mask per subband would take
-# subbands × voxels samples, the factors one line and two planes.
+# construction without its wavelet, digitally sheared.  A full mask per subband
+# would take subbands × voxels samples, so each is kept as two planes
+# (`_ProductMask`): ĝ · Φ̂_{k₁} over (c, e₁) and Φ̂_{k₂} over (c, e₂).
 
-# The 2-D wedge of scale ℓ before shearing: p_ℓ ∗ (δ ⊗ h_{J+1−ℓ+d}).
-function _compact_wedge(sys::CompactShearlets, ℓ::Int)
-    J, d, h = sys.scales, sys.shear_levels[ℓ], sys.qmf
-    p = _upsample(_upsample(sys.fan, 2^(J - ℓ), 1), 2^(J + 1 - ℓ + d), 2)
-    return _conv(p, transpose(_atrous_lowpass(h, J + 1 - ℓ + d)))
-end
-
-# The real frequency response of a centred, point-symmetric filter on a full DFT
-# grid of size `n` (1-D or 2-D).
-function _full_response(f::AbstractArray, n::Tuple)
-    folded = zeros(n)
-    c = _centre.(size(f))
-    for I in CartesianIndices(f)
-        folded[CartesianIndex(ntuple(a -> mod(I[a] - c[a], n[a]) + 1, length(n)))] += f[I]
-    end
-    F = FFTW.fft(folded)
-    maximum(abs ∘ imag, F) <= 1.0e-9 * max(1.0, maximum(abs, F)) || throw(ArgumentError("shearlet filter is not point-symmetric"))
-    return real.(F)
-end
-
-# A factor over the axes `ax` (one or two, the response's own order) placed on
-# the 3-D `rfft` grid of `dims`: axis 1 keeps its non-negative half, the axes
-# not in `ax` become singletons.
-function _orient(R::AbstractArray, ax::Tuple, dims::NTuple{3, Int})
-    rd = _rfft_dims(dims)
-    A = R[ntuple(i -> ax[i] == 1 ? (1:rd[1]) : Colon(), length(ax))...]
+# A response over the axes `ax` (one or two, in the response's own order) placed
+# on the 3-D `rfft` grid of `dims`: axis 1 halved, the axes not in `ax` singletons.
+function _oriented_response(f::AbstractArray, ax::Tuple, dims::NTuple{3, Int})
+    R = _centred_response(f, map(a -> dims[a], ax), something(findfirst(==(1), ax), 0))
     if length(ax) == 2 && ax[1] > ax[2]
-        A = permutedims(A)
+        R = permutedims(R)
         ax = (ax[2], ax[1])
     end
-    shape = ntuple(a -> (i = findfirst(==(a), ax); i === nothing ? 1 : size(A, i)), 3)
-    return reshape(Array(A), shape)
+    return reshape(R, ntuple(a -> (i = findfirst(==(a), ax); i === nothing ? 1 : size(R, i)), 3))
 end
 
 function _shearlet_masks(sys::CompactShearlets, dims::NTuple{3, Int}, ::Type{Tf}) where {Tf}
-    layout = shearlet_layout(sys, dims)
-    rd = _rfft_dims(dims)
-    T = Float64
-    hJ = _atrous_lowpass(sys.qmf, sys.scales)
-    factors = Tuple{Array{T, 3}, Array{T, 3}, Array{T, 3}}[]
-    push!(factors, ntuple(a -> _orient(_full_response(hJ, (dims[a],)), (a,), dims), 3))
-    for (ℓ, d) in enumerate(sys.shear_levels)
-        g = _atrous_highpass(sys.qmf, sys.scales + 1 - ℓ)
-        wedges = [_digital_shear(_compact_wedge(sys, ℓ), -k, d, sys.qmf) for k in -(2^d):(2^d)]
+    J, h = sys.scales, sys.qmf
+    hJ = _atrous_lowpass(h, J)
+    factors = Tuple{Array{Float64, 3}, Array{Float64, 3}}[]
+    push!(factors, (_oriented_response(hJ .* transpose(hJ), (1, 2), dims), _oriented_response(hJ, (3,), dims)))
+    for ℓ in 1:J
+        g = _atrous_highpass(h, J + 1 - ℓ)
+        wedges = _digital_shears(_compact_wedge(sys, ℓ), sys.shear_levels[ℓ], h)
         for c in 1:3
             e1, e2 = Tuple(e for e in 1:3 if e != c)
-            G = _orient(_full_response(g, (dims[c],)), (c,), dims)
-            W1 = [_orient(_full_response(w, (dims[c], dims[e1])), (c, e1), dims) for w in wedges]
-            W2 = [_orient(_full_response(w, (dims[c], dims[e2])), (c, e2), dims) for w in wedges]
+            G = _oriented_response(g, (c,), dims)
+            GW1 = [G .* _oriented_response(w, (c, e1), dims) for w in wedges]
+            W2 = [_oriented_response(w, (c, e2), dims) for w in wedges]
             for i2 in eachindex(wedges), i1 in eachindex(wedges)
-                push!(factors, (G, W1[i1], W2[i2]))
+                push!(factors, (GW1[i1], W2[i2]))
             end
         end
     end
-    # Dual frame: the synthesis divides by Σ |ψ̂|² over all filters.
-    den = zeros(T, rd)
-    for (a, b, c) in factors
-        den .+= (a .* b .* c) .^ 2
+    den = zeros(_rfft_dims(dims))
+    for (a, b) in factors
+        den .+= (a .* b) .^ 2
     end
-    minimum(den) > 0 || throw(ArgumentError("the shearlet filters do not cover every frequency of a $(dims) grid"))
-    denT = Tf.(den)
     # Factors shared between subbands stay shared after the conversion.
-    cache = IdDict{Array{T, 3}, Array{Tf, 3}}()
+    cache = IdDict{Array{Float64, 3}, Array{Tf, 3}}()
     conv(a) = get!(() -> Tf.(a), cache, a)
-    return layout, [_ProductMask(conv(a), conv(b), conv(c), denT) for (a, b, c) in factors]
+    return _MaskSet([_ProductMask(conv(a), conv(b)) for (a, b) in factors]; post = _compact_post(den, dims, Tf))
 end

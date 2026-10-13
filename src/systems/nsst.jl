@@ -75,12 +75,12 @@ Base.:(==)(a::NSSTShearlets, b::NSSTShearlets) =
 # Shears per side of each cone at a scale with 2^d directions.
 _nsst_shears(d::Int) = 2^(d - 2)
 
+# The shearlets of a scale are the band-limited system's 2-D ones: cone 1 with
+# k ∈ -s:s, cone 2 with k ∈ 1-s:s-1, the seam shearlets glued across the cones.
 function shearlet_layout(sys::NSSTShearlets, ::NTuple{2, Int})
     layout = [_lowpass_index(Val(2))]
-    for (j, d) in enumerate(sys.directions)
-        s = _nsst_shears(d)
-        append!(layout, ShearletIndex{1}(j, 1, (k,)) for k in -s:s)
-        append!(layout, ShearletIndex{1}(j, 2, (k,)) for k in (1 - s):(s - 1))
+    for (j, d) in enumerate(sys.directions), (c, k, _) in _bl_scale_elements(Val(2), _nsst_shears(d))
+        push!(layout, ShearletIndex{1}(j, c, k))
     end
     return layout
 end
@@ -88,45 +88,28 @@ end
 shearlet_layout(::NSSTShearlets, dims::Tuple) =
     throw(ArgumentError("the NSST supports 2-D data only, got size $(dims)"))
 
-# The squared angular windows of one scale (`s` shears per side) at the
-# frequency f, in `shearlet_layout` order of the scale; they sum to one.
-function _nsst_windows!(v, f::NTuple{2}, s::Int)
-    cone = abs(f[2]) <= abs(f[1]) ? 1 : 2
-    r = f[1] == f[2] == 0 ? 0.0 : (cone == 1 ? f[2] / f[1] : f[1] / f[2])
-    i = 0
-    for (c, ks) in ((1, -s:s), (2, (1 - s):(s - 1)))
-        for k in ks
-            i += 1
-            v[i] = (c == cone || abs(k) == s) ? _meyer_psi2(s * r + k)^2 : 0.0
-        end
-    end
-    return v
-end
-
 # The shearing filters of one scale as masks on the `rfft` grid of `dims`
 # (vectors over its linear indices), from windows sampled on an L × L grid.
 function _nsst_shearing_masks(dims::NTuple{2, Int}, s::Int, L::Int)
-    n = 4s
+    members = [m for (_, _, m) in _bl_scale_elements(Val(2), s)]
+    n = length(members)
     rd = _rfft_dims(dims)
     # Frequency-domain variant: the windows sampled on the image grid itself.
     grid = L == 0 ? dims : (min(L, dims[1]), min(L, dims[2]))
+    # The squared angular windows of the band-limited system, which sum to one;
+    # the slope is measured in units of each axis' Nyquist frequency.
+    function evaluate!(v, f)
+        cone, r = _cone_slopes((f[1] / grid[1], f[2] / grid[2]))
+        _angular_windows!(v, 0, members, cone, r, s, 1.0)
+        v .= v .^ 2
+        return 1:n
+    end
     W = zeros(grid..., n)
-    v = zeros(n)
-    acc = zeros(n)
+    v, acc = zeros(n), zeros(n)
     for I in CartesianIndices(grid)
-        f = ntuple(d -> _signed_bin(I[d], grid[d]), 2)
-        nyq = ntuple(d -> iseven(grid[d]) && abs(f[d]) == grid[d] ÷ 2, 2)
-        fill!(acc, 0.0)
-        nrep = 0
-        # A Nyquist sample stands for ±n/2: average the windows (linearly, so
-        # they still sum to one) to keep them point-symmetric.
-        for s1 in (nyq[1] ? (-1, 1) : (1,)), s2 in (nyq[2] ? (-1, 1) : (1,))
-            fr = (nyq[1] ? s1 * grid[1] ÷ 2 : f[1], nyq[2] ? s2 * grid[2] ÷ 2 : f[2])
-            # The slope is measured in units of each axis' Nyquist frequency.
-            acc .+= _nsst_windows!(v, (fr[1] / grid[1], fr[2] / grid[2]), s)
-            nrep += 1
-        end
-        W[I, :] .= acc ./ nrep
+        # Mean over the Nyquist aliases: the windows still sum to one.
+        _alias_sample!(acc, v, evaluate!, I, grid, false)
+        W[I, :] .= acc
     end
     grid == dims && return [vec(W[1:rd[1], :, i]) for i in 1:n]
     # Local variant: the L × L filter taps, zero-padded to the image (a tap at
@@ -149,23 +132,27 @@ function _nsst_shearing_masks(dims::NTuple{2, Int}, s::Int, L::Int)
     return masks
 end
 
+# The directional subbands of a level share its synthesis mask S_j, so they form
+# one group: the inverse sums them in space and pays one FFT per level.
 function _shearlet_masks(sys::NSSTShearlets, dims::NTuple{2, Int}, ::Type{Tf}) where {Tf}
-    layout = shearlet_layout(sys, dims)
     J = length(sys.directions)
     rd = _rfft_dims(dims)
     a1, gh1, s1 = _nsp_responses(sys.pyramid, J, dims[1]; bins = 1:rd[1])
     a2, gh2, s2 = _nsp_responses(sys.pyramid, J, dims[2])
     realpart(z) = (maximum(abs ∘ imag, z) < 1.0e-10 || throw(ArgumentError("the pyramid response is not real")); real.(z))
     sep(u, v) = vec(realpart(u .* transpose(v)))
-    masks = _DenseMask{Tf, Vector{Tf}}[]
-    push!(masks, _DenseMask(Tf.(sep(a1[J + 1], a2[J + 1])), Tf.(sep(s1[J + 1], s2[J + 1]))))
+    ana = [_DenseMask(Tf.(sep(a1[J + 1], a2[J + 1])))]
+    syn = [_DenseMask(Tf.(sep(s1[J + 1], s2[J + 1])))]
+    groups = [1:1]
     for j in 1:J
         lvl = J + 1 - j   # pyramid level 1 is the finest
         B = vec(realpart(a1[lvl] .* transpose(a2[lvl]) .* (1 .- gh1[lvl] .* transpose(gh2[lvl]))))
-        S = Tf.(sep(s1[lvl], s2[lvl]))   # shared by the directions of the level
+        first = length(ana) + 1
         for W in _nsst_shearing_masks(dims, _nsst_shears(sys.directions[j]), sys.filter_size[j])
-            push!(masks, _DenseMask(Tf.(B .* W), S))
+            push!(ana, _DenseMask(Tf.(B .* W)))
         end
+        push!(groups, first:length(ana))
+        push!(syn, _DenseMask(Tf.(sep(s1[lvl], s2[lvl]))))
     end
-    return layout, masks
+    return _MaskSet(ana, syn, groups, nothing)
 end

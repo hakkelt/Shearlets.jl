@@ -5,7 +5,7 @@
 # and keeps the whole set in one allocation, sliced with `selectdim(c, N + 1, i)`.
 # `shearlet_layout(system, size(x))[i]` says what subband `i` is.
 
-_coefficient_size(ws::ShearletWorkspace) = (ws.dims..., length(ws.masks))
+_coefficient_size(ws::ShearletWorkspace) = (ws.dims..., _nsubbands(ws))
 
 # Masks are built on the host; device data needs a workspace adapted to it.
 function _check_host(workspace, x::AbstractArray)
@@ -50,7 +50,7 @@ function shearlet_forward(
     )
     _check_host(workspace, x)
     Td = _data_eltype(x)
-    ws = _workspace(workspace, sys, size(x), Td)
+    ws = _workspace(workspace, sys, size(x), Td, _threaded(threading))
     coeffs = similar(x, Td, _coefficient_size(ws))
     return shearlet_forward!(coeffs, x, sys; workspace = ws, threading = threading)
 end
@@ -66,9 +66,10 @@ function shearlet_forward!(
         workspace::Union{ShearletWorkspace, Nothing} = nothing, threading::ThreadingPolicy = Auto()
     )
     _check_host(workspace, x)
-    ws = _workspace(workspace, sys, size(x), _data_eltype(x))
+    threaded = _threaded(threading)
+    ws = _workspace(workspace, sys, size(x), _data_eltype(x), threaded)
     _check_coefficients(coeffs, ws)
-    _forward_into!(coeffs, x, ws, _threaded(threading))
+    _forward_into!(coeffs, x, ws, threaded)
     return coeffs
 end
 
@@ -76,7 +77,8 @@ end
 _band(coeffs::AbstractArray, i::Int) = selectdim(coeffs, ndims(coeffs), i)
 
 function _forward_into!(coeffs::AbstractArray, x::AbstractArray, ws::ShearletWorkspace{Td, Tf, N}, threaded::Bool) where {Td, Tf, N}
-    if _nchannels(ws) == 1 && _plannable(_band(coeffs, 1), Tf, N)
+    # Every slice is aligned if the first two are: they are equally spaced.
+    if _nchannels(ws) == 1 && all(i -> _plannable(_band(coeffs, i), Tf, N), 1:min(2, size(coeffs, N + 1)))
         # Real data into dense slices: the inverse FFT writes the subbands.
         _engine_forward!((i, t, c) -> _band(coeffs, i), (i, t) -> nothing, x, ws, threaded)
     else
@@ -100,7 +102,7 @@ function shearlet_forward(
     )
     _check_host(workspace, x)
     Td = _data_eltype(x)
-    ws = _workspace(workspace, sys, size(x), Td)
+    ws = _workspace(workspace, sys, size(x), Td, false)
     out = Td <: Real ? nothing : similar(x, Td)
     target(i, t, c) = ws.rbufs[t][c]
     emit(i, t) = (f(i, out === nothing ? ws.rbufs[t][1] : _combine!(out, ws.rbufs[t])); nothing)
@@ -134,9 +136,10 @@ function shearlet_inverse!(
         workspace::Union{ShearletWorkspace, Nothing} = nothing, threading::ThreadingPolicy = Auto()
     )
     _check_host(workspace, x)
-    ws = _workspace(workspace, sys, size(x), promote_type(_data_eltype(x), _data_eltype(coeffs)))
+    threaded = _threaded(threading)
+    ws = _workspace(workspace, sys, size(x), promote_type(_data_eltype(x), _data_eltype(coeffs)), threaded)
     _check_coefficients(coeffs, ws)
-    return _engine_inverse!(i -> _band(coeffs, i), x, ws, _threaded(threading))
+    return _engine_inverse!(i -> _band(coeffs, i), x, ws, threaded)
 end
 
 """
@@ -151,7 +154,7 @@ function shearlet_inverse(
         workspace::Union{ShearletWorkspace, Nothing} = nothing
     )
     Td = float(T)
-    ws = _workspace(workspace, sys, Tuple(dims), Td)
+    ws = _workspace(workspace, sys, Tuple(dims), Td, false)
     x = Array{Td}(undef, dims...)
     return _engine_inverse!(f, x, ws, false)
 end
@@ -170,11 +173,12 @@ are equal.
 function shearlet_spectra(sys::ShearletSystem, dims::Tuple; T::Type{<:AbstractFloat} = Float64, synthesis::Bool = false)
     dims = Tuple(Int.(dims))
     N = length(dims)
-    _, masks = _shearlet_masks(sys, dims, T)
+    ms = _shearlet_masks(sys, dims, T)
     rd = _rfft_dims(dims)
-    out = zeros(T, dims..., length(masks))
-    for (i, m) in enumerate(masks)
-        half = _dense_masks(m, rd)[synthesis ? 2 : 1]
+    out = zeros(T, dims..., length(ms.ana))
+    for (g, grp) in enumerate(ms.groups), i in grp
+        half = synthesis ? _dense_mask(ms.syn[g], rd) : _dense_mask(ms.ana[i], rd)
+        synthesis && ms.post !== nothing && (half .*= ms.post)
         dst = selectdim(out, N + 1, i)
         for I in CartesianIndices(dims)
             # The other half of the first axis is the mirror image M(-f) = M(f).

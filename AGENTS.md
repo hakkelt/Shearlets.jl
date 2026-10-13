@@ -17,8 +17,8 @@ the cone-adapted construction is the same in 2-D and 3-D (two cones, three
 pyramids), with no lattice that only exists in the plane.
 
 The surface shared with the core: `FilterPair`, `CDF97`, the threading policy
-types, and the internals `_data_eltype`, `_foreach_chunk`, `_chunked_sum!`,
-`_with_fftw_threads` and `_nsp_responses` (the NSST pyramid), imported in
+types, and the internals `_data_eltype`, `_n_tasks`, `_foreach_chunk`, `_chunked_sum!`,
+`_loop_threaded`, `_with_fftw_threads`, `upsample_filter` and `_nsp_responses` (the NSST pyramid), imported in
 `src/Shearlets.jl`.
 
 **First checkout**: `MultiscaleFilterBanks.jl` is unregistered and expected as a
@@ -39,13 +39,17 @@ input; a transform is one FFT, then per subband a masked product and an inverse
 FFT. The pieces:
 
 - `src/systems/*.jl` — one file per system. A system implements
-  `shearlet_layout(sys, dims)` and `_shearlet_masks(sys, dims, Tf) -> (layout, masks)`;
+  `shearlet_layout(sys, dims)` and `_shearlet_masks(sys, dims, Tf) -> _MaskSet`;
   nothing else is system-specific.
 - `src/engine/masks.jl` — the mask kinds: `_SparseMask` (support indices,
   for band-limited masks), `_DenseMask` (FIR filters) and `_ProductMask`
-  (broadcastable factors over a shared dual-frame denominator, for 3-D FIR
-  filters whose full masks would not fit in memory). Each has an analysis and a
-  synthesis mask; for a Parseval system they are the same array.
+  (two broadcastable planes, for 3-D FIR filters whose full masks would not fit
+  in memory), and `_MaskSet`: an analysis mask per subband, a synthesis mask per
+  group of consecutive subbands, and an optional post-factor of the synthesis
+  sum. A Parseval system has singleton groups with the analysis masks; a dual
+  frame adds the post-factor `1 / Σ Aᵢ²` instead of a second mask per subband;
+  the NSST groups each level under its pyramid mask, so the inverse sums a
+  level's subbands in space and pays one FFT per level.
 - `src/engine/workspace.jl` — buffers, plans, and the threaded forward/inverse
   loops over subbands.
 - `src/transforms/shearlet.jl` — the public API.
@@ -94,8 +98,10 @@ FFT. The pieces:
   The shared engine is two-stage (pyramid mask × bank channel, dense complex
   masks). Band-limited masks are compactly supported in frequency and stored
   sparsely — dense complex masks would take ~25× the memory — and 3-D compact
-  shearlets need factored masks; neither fits that shape. The NSST would fit it
-  and could move onto it if its grouping (one pyramid product per level) pays.
+  shearlets need factored masks; neither fits that shape. The one grouping that
+  pays here, the NSST's shared synthesis mask per level, is the `_MaskSet` groups.
+- **Dense products use `@..`** (FastBroadcast), as in the shared engine; it does
+  not take indexed views, so the sparse gather/scatter stays Base broadcast.
 - **NSST shearing filters** are Meyer windows on the pseudo-polar slope,
   sampled on an `L × L` grid and applied as periodic convolutions (ELL 2008
   §3.3); `filter_size = 0` is the frequency-domain variant (§3.1).

@@ -17,25 +17,28 @@ module ShearletsAdaptExt
 # The device workspace runs its subbands in one task: the device's FFTs are
 # parallel already.
 
-using Shearlets: Shearlets, ShearletWorkspace, _SparseMask, _DenseMask, _ProductMask
+using Shearlets: Shearlets, ShearletWorkspace, _MaskSet, _SparseMask, _DenseMask, _ProductMask
 using Adapt: Adapt
 
-# Arrays shared between masks (a shared denominator, a factor common to many
-# subbands, a synthesis mask that is the analysis mask) stay shared on the device.
+# Arrays shared between masks (a factor common to many subbands, a synthesis mask
+# that is an analysis mask) stay shared on the device.
 _adapt_shared(to, a, cache::IdDict) = get!(() -> Adapt.adapt(to, a), cache, a)
+_adapt_shared(to, ::Nothing, cache::IdDict) = nothing
 
-_adapt_mask(to, m::_SparseMask, cache) =
-    _SparseMask(_adapt_shared(to, m.idx, cache), _adapt_shared(to, m.ana, cache), _adapt_shared(to, m.syn, cache))
-_adapt_mask(to, m::_DenseMask, cache) = _DenseMask(_adapt_shared(to, m.ana, cache), _adapt_shared(to, m.syn, cache))
-_adapt_mask(to, m::_ProductMask, cache) = _ProductMask(
-    _adapt_shared(to, m.f1, cache), _adapt_shared(to, m.f2, cache), _adapt_shared(to, m.f3, cache), _adapt_shared(to, m.den, cache),
-)
+_adapt_mask(to, m::_SparseMask, cache) = _SparseMask(_adapt_shared(to, m.idx, cache), _adapt_shared(to, m.val, cache))
+_adapt_mask(to, m::_DenseMask, cache) = _DenseMask(_adapt_shared(to, m.val, cache))
+_adapt_mask(to, m::_ProductMask, cache) = _ProductMask(_adapt_shared(to, m.f1, cache), _adapt_shared(to, m.f2, cache))
 
 function Adapt.adapt_structure(to, ws::ShearletWorkspace{Td, Tf, N}) where {Td, Tf, N}
     cache = IdDict{Any, Any}()
-    masks = [_adapt_mask(to, m, cache) for m in ws.masks]
+    ms = ws.masks
+    masks = _MaskSet(
+        [_adapt_mask(to, m, cache) for m in ms.ana], [_adapt_mask(to, m, cache) for m in ms.syn],
+        ms.groups, _adapt_shared(to, ms.post, cache),
+    )
     proto = Adapt.adapt(to, Array{Tf, N}(undef, ntuple(_ -> 0, N)))
-    return Shearlets._assemble_workspace(ws.system, ws.dims, Td, ws.layout, masks, proto, 1) do rbuf, buf
+    nt = Shearlets._n_tasks(proto, length(ms.ana))
+    return Shearlets._assemble_workspace(ws.system, ws.dims, Td, masks, proto, nt) do rbuf, buf
         Shearlets.plan_rfft(rbuf), Shearlets.plan_brfft(buf, ws.dims[1])
     end
 end

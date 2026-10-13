@@ -1,16 +1,17 @@
 # The mask engine: one FFT of the input, then per subband a masked product and
-# an inverse FFT (analysis); per subband an FFT and a masked accumulation, then
-# one inverse FFT (synthesis).
+# an inverse FFT (analysis); per group of subbands (`_MaskSet`) their sum, an
+# FFT and a masked accumulation, then the post-factor and one inverse FFT
+# (synthesis).
 #
 # Data are transformed on the `rfft` grid.  Complex data are split into their
 # real and imaginary parts, two real channels that go through the same masks, so
 # the transform is real-linear bit for bit and a complex input costs two real
 # ones.  The spectra of the channels are stacked along a trailing axis.
 #
-# The subbands are independent, so both passes split them into contiguous chunks,
-# one task per FFT buffer (`MultiscaleFilterBanks._foreach_chunk`); the synthesis
-# gives each task after the first its own partial sum (`_chunked_sum!`).  FFT
-# plans are single-threaded.
+# The subbands (groups) are independent, so both passes split them into
+# contiguous chunks, one task per FFT buffer (`MultiscaleFilterBanks._foreach_chunk`);
+# the synthesis gives each task after the first its own partial sum
+# (`_chunked_sum!`).  FFT plans are single-threaded.
 
 """
     ShearletWorkspace{Td, Tf, N}
@@ -25,14 +26,13 @@ A workspace holds scratch buffers, so it must not serve two transforms at the
 same time; it threads internally instead.
 """
 struct ShearletWorkspace{
-        Td, Tf, N, S <: ShearletSystem, L, M <: _FrequencyMask{Tf},
+        Td, Tf, N, S <: ShearletSystem, MS <: _MaskSet,
         C <: AbstractArray{Complex{Tf}}, CM <: AbstractMatrix{Complex{Tf}}, B <: AbstractArray{Complex{Tf}, N},
         V <: AbstractVector{Complex{Tf}}, R <: AbstractArray{Tf, N}, P, Q,
     }
     system::S
     dims::NTuple{N, Int}
-    layout::Vector{L}
-    masks::Vector{M}
+    masks::MS
     X::C                    # channel spectra, `(rfft dims..., channels)`; synthesis accumulator
     Xm::CM                  # the same memory as `(points, channels)`
     partials::Vector{C}     # per task ≥ 2: partial synthesis sum
@@ -49,7 +49,9 @@ _nchannels(::Type{<:Real}) = 1
 _nchannels(::Type{<:Complex}) = 2
 _nchannels(::ShearletWorkspace{Td}) where {Td} = _nchannels(Td)
 _ntasks(ws::ShearletWorkspace) = length(ws.bufs)
-_threaded(threading::ThreadingPolicy) = !(threading isa Disabled)
+_nsubbands(ws::ShearletWorkspace) = length(ws.masks.ana)
+# Whether a call threads: asked to, and not inside a caller's NestedThreading budget.
+_threaded(threading::ThreadingPolicy) = _loop_threaded(!(threading isa Disabled))
 
 """
     make_shearlet_workspace(T, dims, system; flags = FFTW.MEASURE) -> ShearletWorkspace
@@ -58,14 +60,21 @@ Build the masks, buffers and FFT plans of `system` for data of element type `T`
 (real or complex) and size `dims`.  `flags` are the FFTW planner flags.
 """
 function make_shearlet_workspace(::Type{T}, dims::NTuple{N, Int}, sys::ShearletSystem; flags::UInt32 = FFTW.MEASURE) where {T <: Number, N}
+    return _make_workspace(T, dims, sys, flags, true)
+end
+
+# A host workspace, with buffers for one task per thread when `threaded`, else one.
+function _make_workspace(::Type{T}, dims::NTuple{N, Int}, sys::ShearletSystem, flags::UInt32, threaded::Bool) where {T, N}
     Td = float(T)
-    layout, masks = _shearlet_masks(sys, dims, real(Td))
-    nt = max(1, min(Threads.nthreads(), length(masks)))
-    return _assemble_workspace(sys, dims, Td, layout, masks, Array{real(Td), N}(undef, ntuple(_ -> 0, N)), nt) do rbuf, buf
-        # FFTW's own threads off: the engine threads over subbands instead.
+    masks = _shearlet_masks(sys, dims, real(Td))
+    proto = Array{real(Td), N}(undef, ntuple(_ -> 0, N))
+    nt = threaded ? _n_tasks(proto, length(masks.ana)) : 1
+    return _assemble_workspace(sys, dims, Td, masks, proto, nt) do rbuf, buf
+        # FFTW's own threads off: the engine threads over subbands instead.  The
+        # plans assume aligned arrays (`UNALIGNED` costs 1.3–1.8×); `_plannable`
+        # routes any other array through an aligned buffer.
         _with_fftw_threads(1) do
-            f = flags | FFTW.UNALIGNED
-            plan_rfft(rbuf; flags = f), plan_brfft(buf, dims[1]; flags = f)
+            plan_rfft(rbuf; flags), plan_brfft(buf, dims[1]; flags)
         end
     end
 end
@@ -74,7 +83,7 @@ end
 # type, host or device) for `nt` tasks and the FFT plans `plans(rbuf, buf)` makes
 # for a real buffer and a spectrum buffer.
 function _assemble_workspace(
-        plans::F, sys::ShearletSystem, dims::NTuple{N, Int}, ::Type{Td}, layout::Vector, masks::Vector,
+        plans::F, sys::ShearletSystem, dims::NTuple{N, Int}, ::Type{Td}, masks::_MaskSet,
         proto::AbstractArray{Tf, N}, nt::Int
     ) where {F, N, Td, Tf}
     nch = _nchannels(Td)
@@ -88,10 +97,10 @@ function _assemble_workspace(
     Xm = reshape(X, :, nch)
     bufs_v = [vec(b) for b in bufs]
     return ShearletWorkspace{
-        Td, Tf, N, typeof(sys), eltype(layout), eltype(masks), typeof(X), typeof(Xm), eltype(bufs),
+        Td, Tf, N, typeof(sys), typeof(masks), typeof(X), typeof(Xm), eltype(bufs),
         eltype(bufs_v), eltype(eltype(rbufs)), typeof(pfwd), typeof(pinv),
     }(
-        sys, dims, layout, masks, X, Xm, partials, [reshape(p, :, nch) for p in partials],
+        sys, dims, masks, X, Xm, partials, [reshape(p, :, nch) for p in partials],
         bufs, bufs_v, rbufs, pfwd, pinv, Tf(1 / prod(dims))
     )
 end
@@ -100,9 +109,9 @@ make_shearlet_workspace(::Type{T}, dims::Tuple, sys::ShearletSystem; kwargs...) 
     make_shearlet_workspace(T, Tuple(Int.(dims)), sys; kwargs...)
 
 # The workspace for one call: `workspace` after checking it fits, else a new one.
-function _workspace(workspace, sys::ShearletSystem, dims::Tuple, ::Type{Td}) where {Td}
+function _workspace(workspace, sys::ShearletSystem, dims::Tuple, ::Type{Td}, threaded::Bool) where {Td}
     if workspace === nothing
-        return make_shearlet_workspace(Td, dims, sys; flags = FFTW.ESTIMATE)
+        return _make_workspace(Td, Tuple(Int.(dims)), sys, FFTW.ESTIMATE, threaded)
     end
     workspace.dims == dims ||
         throw(DimensionMismatch("workspace was built for size $(workspace.dims), got $(dims)"))
@@ -114,24 +123,27 @@ end
 
 Base.eltype(::ShearletWorkspace{Td}) where {Td} = Td
 
-# Spectrum of channel `c` of `x` into column `c` of `ws.X`, through the task-1
-# real buffer unless `x` is already a real array the plan can read.
-function _spectrum!(ws::ShearletWorkspace{Td, Tf, N}, x::AbstractArray, c::Int) where {Td, Tf, N}
-    dst = selectdim(ws.X, N + 1, c)
+# F = rfft of channel `c` of `x`, read by the plan `p` directly if it can, else
+# through the real buffer `rb`.
+function _rfft_channel!(F, p, x::AbstractArray, c::Int, rb::AbstractArray{Tf, N}) where {Tf, N}
     if _plannable(x, Tf, N)
-        mul!(dst, ws.pfwd, x)
+        mul!(F, p, x)
     else
-        rb = ws.rbufs[1][1]
-        rb .= _channel.(x, c)
-        mul!(dst, ws.pfwd, rb)
+        @.. rb = _channel(x, c)
+        mul!(F, p, rb)
     end
-    return dst
+    return F
 end
 
 # Whether the FFT plans can read or write `a` in place: a dense, column-major
-# array of the filter type (a whole array, or a slice of the stacked subbands).
+# array of the filter type (a whole array, or a slice of the stacked subbands),
+# 16-byte aligned on the host like the buffers the plans were made for.
 _plannable(a::AbstractArray, ::Type{Tf}, N::Int) where {Tf} =
-    a isa StridedArray{Tf} && ndims(a) == N && strides(a) == Base.size_to_strides(1, size(a)...)
+    a isa StridedArray{Tf} && ndims(a) == N && strides(a) == Base.size_to_strides(1, size(a)...) && _fftw_aligned(a)
+
+_fftw_aligned(a::AbstractArray) = parent(a) === a ? !(a isa Array) || FFTW.alignment_of(a) == 0 : _fftw_aligned_in(a, parent(a))
+_fftw_aligned_in(a, ::Array) = FFTW.alignment_of(a) == 0
+_fftw_aligned_in(a, p) = _fftw_aligned(p)   # device arrays: their FFT library needs no alignment
 
 _channel(x::Real, ::Int) = x
 _channel(x::Complex, c::Int) = c == 1 ? real(x) : imag(x)
@@ -142,15 +154,21 @@ _channel(x::Complex, c::Int) = c == 1 ? real(x) : imag(x)
 function _engine_forward!(target::F, emit::G, x::AbstractArray, ws::ShearletWorkspace{Td, Tf, N}, threaded::Bool) where {F, G, Td, Tf, N}
     nch = _nchannels(ws)
     for c in 1:nch
-        _spectrum!(ws, x, c)
+        Xc = selectdim(ws.X, N + 1, c)
+        # Channel 2 is misaligned when the spectrum has an odd length in Float32.
+        if _plannable(Xc, Complex{Tf}, N)
+            _rfft_channel!(Xc, ws.pfwd, x, c, ws.rbufs[1][1])
+        else
+            copyto!(Xc, _rfft_channel!(ws.bufs[1], ws.pfwd, x, c, ws.rbufs[1][1]))
+        end
     end
     s = ws.scale
-    _foreach_chunk(length(ws.masks), _ntasks(ws), threaded) do range, t
+    ana = ws.masks.ana
+    _foreach_chunk(length(ana), _ntasks(ws), threaded) do range, t
         Z, Zv = ws.bufs[t], ws.bufs_v[t]
         for i in range
-            m = ws.masks[i]
             for c in 1:nch
-                _mask_apply!(Z, Zv, m, ws.X, ws.Xm, c, s)
+                _mask_apply!(Z, Zv, ana[i], ws.X, ws.Xm, c, s)
                 mul!(target(i, t, c), ws.pinv, Z)
             end
             emit(i, t)
@@ -159,34 +177,59 @@ function _engine_forward!(target::F, emit::G, x::AbstractArray, ws::ShearletWork
     return nothing
 end
 
-# Synthesis into `x` from the subbands `source(i)` (arrays of the data size).
+# Synthesis into `x` from the subbands `source(i)` (arrays of the data size): per
+# group, the subbands summed in space, one FFT and the group's mask; then the
+# post-factor and one inverse FFT per channel.
 function _engine_inverse!(source::S, x::AbstractArray, ws::ShearletWorkspace{Td, Tf, N}, threaded::Bool) where {S, Td, Tf, N}
     nch = _nchannels(ws)
     s = ws.scale
+    ms = ws.masks
+    ng = length(ms.groups)
     fill!(ws.X, zero(eltype(ws.X)))
-    _chunked_sum!(ws.X, ws.partials, length(ws.masks), threaded) do a, range, t
+    # Fewer groups than tasks: the idle tasks need no partial sums.
+    partials = view(ws.partials, 1:(min(_ntasks(ws), ng) - 1))
+    _chunked_sum!(ws.X, partials, ng, threaded) do a, range, t
         am = t == 1 ? ws.Xm : ws.partials_m[t - 1]
         F, Fv = ws.bufs[t], ws.bufs_v[t]
-        for i in range
-            m = ws.masks[i]
-            band = source(i)
-            for c in 1:nch
-                if nch == 1 && _plannable(band, Tf, N)
-                    mul!(F, ws.pfwd, band)
-                else
-                    rb = ws.rbufs[t][c]
-                    rb .= _channel.(band, c)
-                    mul!(F, ws.pfwd, rb)
+        rbs = ws.rbufs[t]
+        for g in range
+            grp = ms.groups[g]
+            if length(grp) == 1
+                band = source(first(grp))
+                for c in 1:nch
+                    _rfft_channel!(F, ws.pfwd, band, c, rbs[c])
+                    _mask_accumulate!(a, am, ms.syn[g], F, Fv, c, s)
                 end
-                _mask_accumulate!(a, am, m, F, Fv, c, s)
+            else
+                for i in grp
+                    band = source(i)
+                    for c in 1:nch
+                        rb = rbs[c]
+                        i == first(grp) ? (@.. rb = _channel(band, c)) : (@.. rb += _channel(band, c))
+                    end
+                end
+                for c in 1:nch
+                    mul!(F, ws.pfwd, rbs[c])
+                    _mask_accumulate!(a, am, ms.syn[g], F, Fv, c, s)
+                end
             end
+        end
+    end
+    if ms.post !== nothing
+        for c in 1:nch
+            selectdim(ws.X, N + 1, c) .*= ms.post
         end
     end
     if nch == 1 && _plannable(x, Tf, N)
         mul!(x, ws.pinv, selectdim(ws.X, N + 1, 1))
     else
         for c in 1:nch
-            mul!(ws.rbufs[1][c], ws.pinv, selectdim(ws.X, N + 1, c))
+            Xc = selectdim(ws.X, N + 1, c)
+            if _plannable(Xc, Complex{Tf}, N)
+                mul!(ws.rbufs[1][c], ws.pinv, Xc)
+            else
+                mul!(ws.rbufs[1][c], ws.pinv, copyto!(ws.bufs[1], Xc))
+            end
         end
         _combine!(x, ws.rbufs[1])
     end

@@ -24,6 +24,11 @@ x ≈ shearlet_inverse(c, sys)                  # true
 Every subband has the size of the input. Real input gives real subbands;
 complex input is transformed as its real and imaginary parts.
 
+The [theory](@ref theory) page explains the constructions and shows their
+elements and frequency tilings as the papers do; the [examples](@ref examples)
+reproduce the papers' experiments: edge detection, directional selectivity,
+shift invariance, denoising and volumes.
+
 ## Repeated transforms
 
 ```julia

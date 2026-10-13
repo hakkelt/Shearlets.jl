@@ -129,20 +129,27 @@ shearlet_layout(::CompactShearlets, dims::Tuple) =
 _centre(n::Int) = (n + 1) ÷ 2
 
 # Insert r − 1 zeros between the taps along `dim`.
-function _upsample(a::AbstractArray, r::Int, dim::Int)
+_upsample(a::AbstractArray, r::Int, dim::Int) = _upsample(a, r, Val(dim))
+
+# The axis is a type parameter so that the view below has a concrete type.
+_slice(a::AbstractArray{<:Any, N}, ::Val{D}, idx) where {N, D} = view(a, ntuple(k -> k == D ? idx : Colon(), Val(N))...)
+
+function _upsample(a::AbstractArray{<:Any, N}, r::Int, ::Val{D}) where {N, D}
     r == 1 && return copy(a)
-    sz = ntuple(d -> d == dim ? (size(a, d) - 1) * r + 1 : size(a, d), ndims(a))
+    sz = ntuple(d -> d == D ? (size(a, d) - 1) * r + 1 : size(a, d), Val(N))
     out = zeros(eltype(a), sz)
-    selectdim(out, dim, 1:r:sz[dim]) .= a
+    _slice(out, Val(D), 1:r:sz[D]) .= a
     return out
 end
 
 # Keep the taps at offsets that are multiples of r along `dim`.
-function _downsample(a::AbstractArray, r::Int, dim::Int)
+_downsample(a::AbstractArray, r::Int, dim::Int) = _downsample(a, r, Val(dim))
+
+function _downsample(a::AbstractArray, r::Int, ::Val{D}) where {D}
     r == 1 && return copy(a)
-    c = _centre(size(a, dim))
+    c = _centre(size(a, D))
     m = (c - 1) ÷ r
-    return copy(selectdim(a, dim, (c - m * r):r:(c + m * r)))
+    return copy(_slice(a, Val(D), (c - m * r):r:(c + m * r)))
 end
 
 # Full linear convolution of two centred arrays of the same dimension, by real
@@ -158,7 +165,7 @@ function _conv(a::AbstractArray, b::AbstractArray)
 end
 
 # A 1-D filter oriented along `dim` of an N-dimensional array.
-_along(f::AbstractVector, dim::Int, N::Int) = reshape(f, ntuple(d -> d == dim ? length(f) : 1, N))
+_along(f::AbstractVector, dim::Int, ::Val{N}) where {N} = reshape(f, ntuple(d -> d == dim ? length(f) : 1, Val(N)))
 
 # The j-level à trous lowpass: ĥ_j(ξ) = Π_{k<j} ĥ(2^k ξ) (eq. 5), ĥ_0 = 1.
 function _atrous_lowpass(h::Vector{Float64}, j::Int)
@@ -185,7 +192,7 @@ end
 function _digital_shears(f::Matrix{Float64}, d::Int, h::Vector{Float64})
     r = 2^d
     hd = _atrous_lowpass(h, d)
-    fine = _conv(_upsample(f, r, 1), _along(r .* hd, 1, 2))
+    fine = _conv(_upsample(f, r, Val(1)), _along(r .* hd, 1, Val(2)))
     n1, n2 = size(fine)
     c1, c2 = _centre(n1), _centre(n2)
     return map(-r:r) do k
@@ -196,21 +203,24 @@ function _digital_shears(f::Matrix{Float64}, d::Int, h::Vector{Float64})
             # out[o₁, o₂] = fine[o₁ − k o₂, o₂]: the sheared filter's offsets.
             out[co + (i - c1) + k * (j - c2), j] = fine[i, j]
         end
-        _downsample(_conv(out, _along(hd, 1, 2)), r, 1)
+        _downsample(_conv(out, _along(hd, 1, Val(2))), r, Val(1))
     end
 end
+
+# The transform axes with `h` first, so that `rfft` halves it.
+_rfft_region(h::Int, ::Val{N}) where {N} = (h, ntuple(a -> a < h ? a : a + 1, Val(N - 1))...)
 
 # The real frequency response of a centred, point-symmetric filter on a DFT grid
 # of size `n` (one entry per axis of `f`): the filter folded onto the periodic
 # grid (offset o ↦ o mod n) and transformed, with its axis `h` halved as by
 # `rfft` (`h = 0`: none).
-function _centred_response(f::AbstractArray, n::Tuple, h::Int)
+function _centred_response(f::AbstractArray{<:Any, N}, n::NTuple{N, Int}, h::Int) where {N}
     folded = zeros(n)
     c = _centre.(size(f))
     for I in CartesianIndices(f)
         folded[CartesianIndex(ntuple(a -> mod(I[a] - c[a], n[a]) + 1, Val(ndims(f))))] += f[I]
     end
-    F = h == 0 ? FFTW.fft(folded) : FFTW.rfft(folded, (h, (a for a in 1:length(n) if a != h)...))
+    F = h == 0 ? FFTW.fft(folded) : FFTW.rfft(folded, _rfft_region(h, Val(N)))
     maximum(abs ∘ imag, F) <= 1.0e-9 * max(1.0, maximum(abs, F)) ||
         throw(ArgumentError("shearlet filter is not point-symmetric"))
     return real.(F)
@@ -219,7 +229,7 @@ end
 # The 2-D wedge of scale ℓ before shearing: p_ℓ ∗ (δ ⊗ h_{J+1−ℓ+d}).
 function _compact_wedge(sys::CompactShearlets, ℓ::Int)
     J, d, h = sys.scales, sys.shear_levels[ℓ], sys.qmf
-    p = _upsample(_upsample(sys.fan, 2^(J - ℓ), 1), 2^(J + 1 - ℓ + d), 2)
+    p = _upsample(_upsample(sys.fan, 2^(J - ℓ), Val(1)), 2^(J + 1 - ℓ + d), Val(2))
     return _conv(p, transpose(_atrous_lowpass(h, J + 1 - ℓ + d)))
 end
 
@@ -238,10 +248,14 @@ function _shearlet_masks(sys::CompactShearlets, dims::NTuple{2, Int}, ::Type{Tf}
     hJ = _atrous_lowpass(h, J)
     responses = [_centred_response(hJ .* transpose(hJ), dims, 1)]
     for ℓ in 1:J
-        ψ = _conv(_compact_wedge(sys, ℓ), _along(_atrous_highpass(h, J + 1 - ℓ), 1, 2))
+        ψ = _conv(_compact_wedge(sys, ℓ), _along(_atrous_highpass(h, J + 1 - ℓ), 1, Val(2)))
         sheared = _digital_shears(ψ, sys.shear_levels[ℓ], h)
-        append!(responses, _centred_response(f, dims, 1) for f in sheared)
-        append!(responses, _centred_response(permutedims(f), dims, 1) for f in sheared)
+        for f in sheared
+            push!(responses, _centred_response(f, dims, 1))
+        end
+        for f in sheared
+            push!(responses, _centred_response(permutedims(f), dims, 1))
+        end
     end
     post = _compact_post(sum(a -> a .^ 2, responses), dims, Tf)
     return _MaskSet([_DenseMask(Tf.(vec(a))) for a in responses]; post)
@@ -260,13 +274,12 @@ end
 
 # A response over the axes `ax` (one or two, in the response's own order) placed
 # on the 3-D `rfft` grid of `dims`: axis 1 halved, the axes not in `ax` singletons.
-function _oriented_response(f::AbstractArray, ax::Tuple, dims::NTuple{3, Int})
-    R = _centred_response(f, map(a -> dims[a], ax), something(findfirst(==(1), ax), 0))
-    if length(ax) == 2 && ax[1] > ax[2]
-        R = permutedims(R)
-        ax = (ax[2], ax[1])
-    end
-    return reshape(R, ntuple(a -> (i = findfirst(==(a), ax); i === nothing ? 1 : size(R, i)), 3))
+function _oriented_response(f::AbstractArray, ax::NTuple{K, Int}, dims::NTuple{3, Int}) where {K}
+    R0 = _centred_response(f, map(a -> dims[a], ax), something(findfirst(==(1), ax), 0))
+    # Put the two axes of a 2-D response in increasing order (no rebinding: the
+    # closure below would capture the variables in a box).
+    R, axs = K == 2 && ax[1] > ax[2] ? (permutedims(R0), (ax[2], ax[1])) : (R0, ax)
+    return reshape(R, ntuple(a -> (i = findfirst(==(a), axs); i === nothing ? 1 : size(R, i)), Val(3)))
 end
 
 function _shearlet_masks(sys::CompactShearlets, dims::NTuple{3, Int}, ::Type{Tf}) where {Tf}

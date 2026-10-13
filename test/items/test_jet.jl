@@ -77,21 +77,10 @@ end
         @test_opt target_modules = M shearlet_inverse!(y, c, sys; workspace = ws)
         @test_opt target_modules = M shearlet_forward(x, sys; workspace = ws)
         @test_opt target_modules = M shearlet_inverse(c, sys; workspace = ws)
-        # Building the masks of a `CompactShearlets` system (`_oriented_response`: `findfirst`/`map`
-        # over an axis tuple the compiler cannot constant-fold) dispatches at run time, and so does
-        # everything that builds them on the way: spectra, workspace construction and the
-        # workspace-free transforms.  The workspace paths above are clean for every system.
-        if sys isa CompactShearlets
-            @test_opt broken = true target_modules = M shearlet_spectra(sys, dims)
-            @test_opt broken = true target_modules = M make_shearlet_workspace(Float64, dims, sys)
-            @test_opt broken = true target_modules = M shearlet_forward(x, sys)
-            @test_opt broken = true target_modules = M shearlet_inverse(c, sys)
-        else
-            @test_opt target_modules = M shearlet_spectra(sys, dims)
-            @test_opt target_modules = M make_shearlet_workspace(Float64, dims, sys)
-            @test_opt target_modules = M shearlet_forward(x, sys)
-            @test_opt target_modules = M shearlet_inverse(c, sys)
-        end
+        @test_opt target_modules = M shearlet_spectra(sys, dims)
+        @test_opt target_modules = M make_shearlet_workspace(Float64, dims, sys)
+        @test_opt target_modules = M shearlet_forward(x, sys)
+        @test_opt target_modules = M shearlet_inverse(c, sys)
         @test_opt target_modules = M shearlet_forward((i, band) -> nothing, x, sys; workspace = ws)
         @test_opt target_modules = M shearlet_inverse(i -> zeros(dims), sys, dims; workspace = ws)
     end

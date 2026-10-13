@@ -71,6 +71,8 @@ end
 
 Base.:(==)(a::NSSTShearlets, b::NSSTShearlets) =
     a.directions == b.directions && a.filter_size == b.filter_size && a.pyramid.h == b.pyramid.h && a.pyramid.g == b.pyramid.g
+Base.hash(a::NSSTShearlets, h::UInt) =
+    hash(a.directions, hash(a.filter_size, hash(a.pyramid.h, hash(a.pyramid.g, hash(NSSTShearlets, h)))))
 
 # Shears per side of each cone at a scale with 2^d directions.
 _nsst_shears(d::Int) = 2^(d - 2)
@@ -144,11 +146,14 @@ function _shearlet_masks(sys::NSSTShearlets, dims::NTuple{2, Int}, ::Type{Tf}) w
     ana = [_DenseMask(Tf.(sep(a1[J + 1], a2[J + 1])))]
     syn = [_DenseMask(Tf.(sep(s1[J + 1], s2[J + 1])))]
     groups = [1:1]
+    # Levels with the same shears and filter size share their shearing masks.
+    shearing = Dict{Tuple{Int, Int}, Vector{Vector{Float64}}}()
     for j in 1:J
         lvl = J + 1 - j   # pyramid level 1 is the finest
         B = vec(realpart(a1[lvl] .* transpose(a2[lvl]) .* (1 .- gh1[lvl] .* transpose(gh2[lvl]))))
         first = length(ana) + 1
-        for W in _nsst_shearing_masks(dims, _nsst_shears(sys.directions[j]), sys.filter_size[j])
+        s, L = _nsst_shears(sys.directions[j]), sys.filter_size[j]
+        for W in get!(() -> _nsst_shearing_masks(dims, s, L), shearing, (s, L))
             push!(ana, _DenseMask(Tf.(B .* W)))
         end
         push!(groups, first:length(ana))

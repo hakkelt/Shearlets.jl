@@ -46,8 +46,9 @@ const _SHEARLAB_QMF = [
 
 # The maximally flat fan filter of order 4 of da Cunha, Zhou & Do (IEEE TIP 15(10),
 # 2006, Table II): with x = cos ω, F₄(x₁, x₂) = (x₁ − x₂)(35 − 5x₁² + 25x₁x₂
-# − 3x₁³x₂ − 5x₂² + 15x₁²x₂² − 3x₁x₂³ + 5x₁³x₂³)/32 is −1 on the vertical fan and
-# +1 on the horizontal one, so P = (1 − F₄)/2 passes |ω₂| < |ω₁| and P + P' = 1
+# − 3x₁³x₂ − 5x₂² + 15x₁²x₂² − 3x₁x₂³ + 5x₁³x₂³)/32 is −1 on the horizontal fan
+# |ω₂| < |ω₁| (F₄(π, 0) = −1) and +1 on the vertical one, so P = (1 − F₄)/2
+# passes the horizontal fan and P + P' = 1
 # with P' the transposed filter.  Returns the 9 × 9 taps, origin at the centre.
 function _maxflat_fan()
     F(x1, x2) = (x1 - x2) * (35 - 5x1^2 + 25x1 * x2 - 3x1^3 * x2 - 5x2^2 + 15x1^2 * x2^2 - 3x1 * x2^3 + 5x1^3 * x2^3) / 32
@@ -107,6 +108,8 @@ CompactShearlets(;
 
 Base.:(==)(a::CompactShearlets, b::CompactShearlets) =
     a.scales == b.scales && a.shear_levels == b.shear_levels && a.qmf == b.qmf && a.fan == b.fan
+Base.hash(a::CompactShearlets, h::UInt) =
+    hash(a.scales, hash(a.shear_levels, hash(a.qmf, hash(a.fan, hash(CompactShearlets, h)))))
 
 function shearlet_layout(sys::CompactShearlets, dims::NTuple{N, Int}) where {N}
     N in (2, 3) || throw(ArgumentError("compactly supported shearlets support 2-D and 3-D data, got size $(dims)"))

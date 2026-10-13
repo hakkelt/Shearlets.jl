@@ -67,5 +67,9 @@ end
     @test_throws ArgumentError NSSTShearlets(pyramid = FilterPair([0.5, 0.5], [1.0, 1.0]))
     @test NSSTShearlets(directions = [2, 3, 4, 4]).filter_size == [32, 32, 16, 16]
     @test NSSTShearlets() == NSSTShearlets()
+    @test hash(NSSTShearlets()) == hash(NSSTShearlets())
+    @test hash(CompactShearlets(scales = 1)) == hash(CompactShearlets(scales = 1))
     @test_throws ArgumentError shearlet_layout(NSSTShearlets(), (8, 8, 8))
+    @test_throws ArgumentError shearlet_forward(randn(8, 8, 8), NSSTShearlets())
+    @test_throws ArgumentError shearlet_spectra(NSSTShearlets(), (8, 8, 8))
 end

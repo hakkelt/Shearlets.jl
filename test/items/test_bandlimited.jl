@@ -132,6 +132,13 @@ end
     @test_throws DimensionMismatch shearlet_forward(randn(64, 64), sys; workspace = ws)
     @test_throws ArgumentError shearlet_forward(x, BandlimitedShearlets(scales = 2); workspace = ws)
     @test_throws DimensionMismatch shearlet_forward!(zeros(dims..., 3), x, sys; workspace = ws)
+    @test_throws ArgumentError shearlet_forward(Float32.(x), sys; workspace = ws)
+    @test_throws ArgumentError shearlet_inverse!(similar(x), complex.(c), sys)
+    # Views and transposes of host arrays need no workspace.
+    @test shearlet_forward(view(hcat(x, x), :, 1:64), sys) ≈ shearlet_forward(x[:, 1:64], sys)
+    @test shearlet_forward(transpose(x), sys) ≈ shearlet_forward(permutedims(x), sys)
+    # Only 2-D and 3-D data.
+    @test_throws ArgumentError shearlet_forward(randn(4, 4, 4, 4), BandlimitedShearlets(scales = 1))
 end
 
 @testitem "Band-limited shearlets: workspace paths do not allocate" tags = [:bandlimited, :workspace] begin

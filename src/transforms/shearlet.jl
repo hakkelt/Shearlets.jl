@@ -9,10 +9,15 @@ _coefficient_size(ws::ShearletWorkspace) = (ws.dims..., _nsubbands(ws))
 
 # Masks are built on the host; device data needs a workspace adapted to it.
 function _check_host(workspace, x::AbstractArray)
-    workspace === nothing && !(x isa Array) &&
+    workspace === nothing && !_on_host(x) &&
         throw(ArgumentError("pass a `workspace` for $(typeof(x)) data: `Adapt.adapt(ArrayType, make_shearlet_workspace(T, dims, system))`"))
     return nothing
 end
+
+# Whether `x` is stored in a host `Array` (views, transposes and reshapes of one
+# included).
+_on_host(x::Array) = true
+_on_host(x::AbstractArray) = (p = parent(x); p !== x && _on_host(p))
 
 function _check_coefficients(coeffs::AbstractArray, ws::ShearletWorkspace)
     size(coeffs) == _coefficient_size(ws) ||
@@ -136,8 +141,11 @@ function shearlet_inverse!(
         workspace::Union{ShearletWorkspace, Nothing} = nothing, threading::ThreadingPolicy = Auto()
     )
     _check_host(workspace, x)
+    _check_host(workspace, coeffs)
+    _data_eltype(x) <: Real && _data_eltype(coeffs) <: Complex &&
+        throw(ArgumentError("complex coefficients need a complex output, got $(eltype(x))"))
     threaded = _threaded(threading)
-    ws = _workspace(workspace, sys, size(x), promote_type(_data_eltype(x), _data_eltype(coeffs)), threaded)
+    ws = _workspace(workspace, sys, size(x), _data_eltype(x), threaded)
     _check_coefficients(coeffs, ws)
     return _engine_inverse!(i -> _band(coeffs, i), x, ws, threaded)
 end
@@ -155,7 +163,8 @@ function shearlet_inverse(
     )
     Td = float(T)
     ws = _workspace(workspace, sys, Tuple(dims), Td, false)
-    x = Array{Td}(undef, dims...)
+    # On the workspace's device.
+    x = similar(ws.rbufs[1][1], Td, ws.dims)
     return _engine_inverse!(f, x, ws, false)
 end
 
@@ -173,7 +182,7 @@ are equal.
 function shearlet_spectra(sys::ShearletSystem, dims::Tuple; T::Type{<:AbstractFloat} = Float64, synthesis::Bool = false)
     dims = Tuple(Int.(dims))
     N = length(dims)
-    ms = _shearlet_masks(sys, dims, T)
+    ms = _system_masks(sys, dims, T)
     rd = _rfft_dims(dims)
     out = zeros(T, dims..., length(ms.ana))
     for (g, grp) in enumerate(ms.groups), i in grp

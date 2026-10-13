@@ -41,6 +41,10 @@ end
             @test maximum(abs, Array(c) .- ref) < 1.0f-4 * maximum(abs, ref)
             @test maximum(abs, Array(shearlet_inverse(c, sys; workspace = ws)) .- x) < 1.0f-4 * maximum(abs, x)
             @test_throws ArgumentError shearlet_forward(xg, sys)
+            # The streaming inverse returns device data.
+            y = shearlet_inverse(i -> selectdim(c, ndims(c), i), sys, dims; T = T, workspace = ws)
+            @test y isa typeof(xg).name.wrapper
+            @test maximum(abs, Array(y) .- x) < 1.0f-4 * maximum(abs, x)
         end
     end
 end

@@ -66,7 +66,7 @@ end
 # A host workspace, with buffers for one task per thread when `threaded`, else one.
 function _make_workspace(::Type{T}, dims::NTuple{N, Int}, sys::ShearletSystem, flags::UInt32, threaded::Bool) where {T, N}
     Td = float(T)
-    masks = _shearlet_masks(sys, dims, real(Td))
+    masks = _system_masks(sys, dims, real(Td))
     proto = Array{real(Td), N}(undef, ntuple(_ -> 0, N))
     nt = threaded ? _n_tasks(proto, length(masks.ana)) : 1
     return _assemble_workspace(sys, dims, Td, masks, proto, nt) do rbuf, buf
@@ -90,7 +90,8 @@ function _assemble_workspace(
     rd = _rfft_dims(dims)
     zeroed(T, sz) = fill!(similar(proto, T, sz), zero(T))
     X = zeroed(Complex{Tf}, (rd..., nch))
-    partials = [similar(X) for _ in 2:nt]
+    # The inverse runs at most one task per synthesis group.
+    partials = [similar(X) for _ in 2:min(nt, length(masks.groups))]
     bufs = [zeroed(Complex{Tf}, rd) for _ in 1:nt]
     rbufs = [[zeroed(Tf, dims) for _ in 1:nch] for _ in 1:nt]
     pfwd, pinv = plans(rbufs[1][1], bufs[1])
@@ -105,6 +106,15 @@ function _assemble_workspace(
     )
 end
 
+# The masks of `system` at size `dims`, after `shearlet_layout` checked that the
+# system supports that many dimensions.
+function _system_masks(sys::ShearletSystem, dims::Tuple, ::Type{Tf}) where {Tf}
+    n = length(shearlet_layout(sys, dims))
+    masks = _shearlet_masks(sys, dims, Tf)
+    @assert length(masks.ana) == n
+    return masks
+end
+
 make_shearlet_workspace(::Type{T}, dims::Tuple, sys::ShearletSystem; kwargs...) where {T <: Number} =
     make_shearlet_workspace(T, Tuple(Int.(dims)), sys; kwargs...)
 
@@ -115,7 +125,7 @@ function _workspace(workspace, sys::ShearletSystem, dims::Tuple, ::Type{Td}, thr
     end
     workspace.dims == dims ||
         throw(DimensionMismatch("workspace was built for size $(workspace.dims), got $(dims)"))
-    _nchannels(workspace) == _nchannels(Td) ||
+    _nchannels(workspace) == _nchannels(Td) && real(eltype(workspace)) == real(Td) ||
         throw(ArgumentError("workspace was built for $(eltype(workspace)) data, got $(Td)"))
     workspace.system == sys || throw(ArgumentError("workspace was built for a different shearlet system"))
     return workspace

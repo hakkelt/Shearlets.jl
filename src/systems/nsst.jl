@@ -43,6 +43,12 @@ the coarsest).  Every subband has the size of the input.
 
 The frame is not tight: `shearlet_inverse` sums the directional subbands of each
 level and inverts the pyramid.
+
+# References
+1. G. Easley, D. Labate, and W.-Q. Lim, "Sparse Directional Image Representations
+   Using the Discrete Shearlet Transform", *Applied and Computational Harmonic
+   Analysis*, 25(1):25–46, 2008.
+   [doi:10.1016/j.acha.2007.09.003](https://doi.org/10.1016/j.acha.2007.09.003)
 """
 struct NSSTShearlets <: ShearletSystem
     directions::Vector{Int}

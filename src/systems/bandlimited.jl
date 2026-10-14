@@ -45,6 +45,20 @@ the three pyramids around the axes).
   one shear per side at every scale (wavelet-like), `α → 0` approaches ridgelets.
 
 Every subband has the size of the input; real input gives real subbands.
+
+# References
+1. S. Häuser and G. Steidl, "Fast Finite Shearlet Transform: a tutorial",
+   2012.
+   [arXiv:1202.1773](https://arxiv.org/abs/1202.1773)
+2. K. Guo and D. Labate, "The Construction of Smooth Parseval Frames of
+   Shearlets", *Mathematical Modelling of Natural Phenomena*, 8(1):82–105, 2013.
+   [doi:10.1051/mmnp/20138106](https://doi.org/10.1051/mmnp/20138106)
+3. F. Voigtlaender and A. Pein, "Analysis vs. Synthesis Sparsity for
+   α-Shearlets", 2017.
+   [arXiv:1702.03559](https://arxiv.org/abs/1702.03559)
+4. P. S. Negi and D. Labate, "3-D Discrete Shearlet Transform and Video
+   Processing", *IEEE Transactions on Image Processing*, 21(6):2944–2954, 2012.
+   [doi:10.1109/TIP.2012.2183883](https://doi.org/10.1109/TIP.2012.2183883)
 """
 struct BandlimitedShearlets <: ShearletSystem
     scales::Int

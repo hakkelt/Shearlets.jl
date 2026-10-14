@@ -104,9 +104,8 @@ end
 
 # On the host the products of `_ProductMask`s are loops: Base's broadcast over
 # the singleton axes of the factors does not vectorise, nor does a complex
-# product, so the complex arrays are read as pairs of reals (at 64³: 0.17 ms
-# against 0.4–0.7 ms for the broadcast).  The first axis is innermost, and a
-# factor without it is a scalar along it.
+# product, so the complex arrays are read as pairs of reals.  The first axis is
+# innermost, and a factor without it is a scalar along it.
 const _HostProduct{Tf} = _ProductMask{Tf, Array{Tf, 3}, Array{Tf, 3}}
 
 function _mask_apply!(Z::Array{Complex{Tf}, 3}, Zv, m::_HostProduct{Tf}, X::Array{Complex{Tf}, 4}, Xm, c::Int, s) where {Tf}

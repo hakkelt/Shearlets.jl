@@ -82,6 +82,15 @@ The two cones overlap at the seam lines (`|k| = 2^d` in both), as in ShearLab.
 On 3-D data the cones are the three pyramids around the axes and a shearlet has
 a shear `(k₁, k₂)` against each of the other two axes, `3(2^(d+1) + 1)²`
 subbands per scale (ShearLab 3D's Definitions 3.3–3.4).
+
+# References
+1. G. Kutyniok, W.-Q. Lim, and R. Reisenhofer, "ShearLab 3D: Faithful Digital
+   Shearlet Transforms Based on Compactly Supported Shearlets", *ACM Transactions
+   on Mathematical Software*, 42(1):5, 2016.
+   [doi:10.1145/2740960](https://doi.org/10.1145/2740960)
+2. W.-Q. Lim, "Nonseparable Shearlet Transform", *IEEE Transactions on Image
+   Processing*, 22(5):2056–2065, 2013.
+   [doi:10.1109/TIP.2013.2244223](https://doi.org/10.1109/TIP.2013.2244223)
 """
 struct CompactShearlets <: ShearletSystem
     scales::Int

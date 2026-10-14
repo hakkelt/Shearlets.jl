@@ -71,7 +71,7 @@ function _make_workspace(::Type{T}, dims::NTuple{N, Int}, sys::ShearletSystem, f
     nt = threaded ? n_tasks(proto, length(masks.ana)) : 1
     return _assemble_workspace(sys, dims, Td, masks, proto, nt) do rbuf, buf
         # FFTW's own threads off: the engine threads over subbands instead.  The
-        # plans assume aligned arrays (`UNALIGNED` costs 1.3–1.8×); `_plannable`
+        # plans assume aligned arrays (`UNALIGNED` is slower); `_plannable`
         # routes any other array through an aligned buffer.
         with_fftw_threads(1) do
             plan_rfft(rbuf; flags), plan_brfft(buf, dims[1]; flags)

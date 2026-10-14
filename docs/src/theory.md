@@ -1,10 +1,8 @@
 # [Theory](@id theory)
 
-The three shearlet systems of this package: what they are, how they are
-discretised, and what their elements look like. The figures follow the ones in
-the papers the systems come from (references at the bottom). Every figure is
-computed when the documentation is built, from `shearlet_spectra`, so it shows
-the implementation, not a sketch of it.
+The figures follow the ones in the papers the systems come from. Every figure
+is computed when the documentation is built, from `shearlet_spectra`, so it
+shows the implementation, not a sketch of it.
 
 ```@setup theory
 using Shearlets, Plots, FFTW, Printf

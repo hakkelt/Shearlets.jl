@@ -13,6 +13,13 @@ shearlet_layout(sys, size(x))[10]             # ShearletIndex(scale = 2, cone = 
 x ≈ shearlet_inverse(c, sys)                  # true
 ```
 
+## Installation
+
+```julia
+using Pkg
+Pkg.add("Shearlets")
+```
+
 ## Shearlet systems
 
 | System | Construction | Frame | Dimensions |
@@ -44,7 +51,11 @@ The subbands are computed in parallel over Julia's threads unless
 
 ## GPU
 
-Load `Adapt` and a backend with an FFT library (CUDA, AMDGPU), and move a
+The transforms run on GPU backends with an FFT library: CUDA.jl (NVIDIA),
+AMDGPU.jl (AMD) and Metal.jl (Apple silicon, `Float32` only); the test suite
+runs on CUDA. OpenCL.jl is supported but much slower than the CPU, because it
+has no FFT: FFTW runs the FFTs on the CPU on `CLArray`s in shared virtual memory
+(OpenCL.jl's default on devices that support it). Load `Adapt` and move a
 workspace to the device:
 
 ```julia
@@ -53,8 +64,10 @@ ws = Adapt.adapt(CuArray, make_shearlet_workspace(Float32, size(x), sys))
 c = shearlet_forward(CuArray(x), sys; workspace = ws)
 ```
 
-## Installation
+## Related packages
 
-`MultiscaleFilterBanks.jl` is not registered yet and is expected as a sibling
-checkout (`../MultiscaleFilterBanks`). On Julia 1.10 run
-`julia --project=. dev/bootstrap.jl` once.
+[Contourlets.jl](https://github.com/hakkelt/Contourlets.jl) (2-D contourlets)
+and [Surfacelets.jl](https://github.com/hakkelt/Surfacelets.jl) (3-D surfacelets)
+are multidirectional transforms of the same family. All three are built on
+[MultiscaleFilterBanks.jl](https://github.com/hakkelt/MultiscaleFilterBanks.jl),
+whose `FilterPair` and `CDF97` are re-exported here.

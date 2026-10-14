@@ -9,9 +9,9 @@
     export fft_backends, Adapt
     # A test item may run outside `runtests.jl` (an IDE, a language server);
     # activate the overlay here too, which only loads it when it exists.
-    isempty(gpu_backends(; include_jlarrays = false)) &&
-        GPUEnv.activate(persist = true, include_jlarrays = false)
-    const fft_backends = gpu_backends(; include_jlarrays = false, supports_fftw = true)
+    isempty(gpu_backends(; include_cpu_backends = false)) &&
+        GPUEnv.activate(persist = true, include_cpu_backends = false)
+    const fft_backends = gpu_backends(; include_cpu_backends = false, supports_fftw = true)
 end
 
 @testitem "GPU Adapt extension is loaded" tags = [:gpu] setup = [GPUBackends] begin

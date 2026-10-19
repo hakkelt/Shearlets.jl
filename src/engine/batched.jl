@@ -59,19 +59,6 @@ _chunk_size(::Nothing) = 1
 # The plan of `plans` for a chunk of `l` subbands.
 _plan(bt::_Batch, plans::Vector, l::Int) = plans[_chunk_size(bt) - l + 1]
 
-# The leading `l` columns of a stack, along its last axis.
-_leading(A::AbstractArray, l::Int) = selectdim(A, ndims(A), 1:l)
-
-# At most this many spectrum samples per stack when the chunk size is chosen
-# without measuring (`_default_chunk`).
-const _BATCH_SAMPLES = 2^21
-
-# `n` subbands in chunks of at most `k`, of near-equal lengths.
-function _even_chunks(n::Int, k::Int)
-    nc = cld(n, clamp(k, 1, n))
-    return [_chunk(n, nc, q) for q in 1:nc]
-end
-
 """
     _make_batch(ws, k) -> Union{_Batch, Nothing}
 
@@ -266,11 +253,9 @@ function _batched_inverse_from!(x::AbstractArray, coeffs::AbstractArray, ws::She
 end
 
 # Choosing the chunk size.  Without measuring, a chunk holds at most
-# `_BATCH_SAMPLES` spectrum samples.  (On an A100, at 256² one chunk of all 61
-# band-limited subbands is 9–13× faster than one subband at a time, at 512² and
-# 64³ chunks of about 16 are 3–4× faster and at 1024² and 96³ chunks of 3–4
-# 1.3–1.6×; larger chunks gain little and cost memory.)  Measuring times every
-# chunk size up to `_BATCH_MAX_SAMPLES` against the per-subband engine.
+# `_BATCH_SAMPLES` spectrum samples (MultiscaleFilterBanks' default for batched
+# device transforms, chosen on these subbands).  Measuring times every chunk size
+# up to `_BATCH_MAX_SAMPLES` against the per-subband engine.
 
 const _BATCH_MAX_SAMPLES = 2^23
 

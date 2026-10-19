@@ -70,3 +70,22 @@ end
         end
     end
 end
+
+@testitem "GPU NSST group sums by reduction" tags = [:gpu] setup = [GPUBackends, ChunkCases] begin
+    using GPUEnv, Random
+    const Adapt = GPUBackends.Adapt
+    # Large enough that the stacked inverse sums each level by one reduction.
+    sys, dims = NSSTShearlets(directions = [2, 3]), (512, 512)
+    @test prod(dims) >= Shearlets._GROUP_SUM_SAMPLES
+    rng = Xoshiro(9)
+    for T in (Float32, ComplexF32)
+        x = ChunkCases.random_input(rng, T, dims)
+        cpu = make_shearlet_workspace(T, dims, sys)
+        ref = shearlet_forward(x, sys; workspace = cpu)
+        for backend in GPUBackends.fft_backends
+            ws = Adapt.adapt(typeof(to_gpu(backend, x)).name.wrapper, cpu)
+            c = to_gpu(backend, ref)
+            @test maximum(abs, Array(shearlet_inverse(c, sys; workspace = ws)) .- x) < 1.0f-4 * maximum(abs, x)
+        end
+    end
+end

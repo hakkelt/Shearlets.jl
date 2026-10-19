@@ -6,12 +6,14 @@
 # masks in one fused kernel where the mask kind allows and runs one batched FFT
 # over the stack:
 #
-#     analysis:   B[:, j] = s · A_{r_j} · X_c,   R_c = brfft(B),   coeffs[.., r] = R
+#     analysis:   B[:, j] = s · A_{r_j} · X_c,   coeffs[.., r]_c = brfft(B)
 #     synthesis:  B = rfft(coeffs[.., r]_c),   X_c += Σ_j s · S_{r_j} · B[:, j]
 #
 # The synthesis takes this path only when every group is one subband (not the
-# NSST, whose levels already cost one FFT each).  A chunk shorter than k leaves
-# the trailing columns of the stacks unused, so one pair of plans serves all.
+# NSST, whose levels already cost one FFT each).  The FFTs of real data read and
+# write the coefficients in place where the plans can; complex data, and slices
+# the plans cannot take, go through the real stacks R.  Chunks have k or k - 1
+# subbands, with a pair of plans each, over the leading columns of the stacks.
 
 # The masks of a chunk, fused:
 # - `_SparseChunk`: the supports of its subbands, `pts` on the grid and `src` in
@@ -39,15 +41,14 @@ The chunked path of a workspace: the chunks of subbands, the stacks and the
 batched plans over their first N axes, and the fused masks of every chunk
 (`syn === nothing` when the synthesis is not chunked).
 """
-struct _Batch{CB <: AbstractArray, CM <: AbstractMatrix, CV <: AbstractVector, RB <: AbstractArray, P, Q, A, S}
+struct _Batch{CB <: AbstractArray, CM <: AbstractMatrix, V <: AbstractVector, RB <: AbstractArray, P, Q, A, S}
     chunks::Vector{UnitRange{Int}}
     B::CB               # (rfft dims..., k): masked spectra, or the spectra of the subbands (synthesis)
     Bm::CM              # the same memory as (points, k)
-    acc::CM             # (points, 1): the column sum of B
-    acc_v::CV
+    ones::V             # k ones: the column sum of B is a matrix-vector product
     R::Vector{RB}       # per channel, (dims..., k): the chunk's subbands in space
-    pinv::P             # batched brfft, B → R
-    pfwd::Q             # batched rfft, R → B (`nothing` without a chunked synthesis)
+    pinv::Vector{P}     # batched brfft, B → R, for chunks of k and k - 1 (`_plan`)
+    pfwd::Q             # the same for rfft, R → B (`nothing` without a chunked synthesis)
     ana::Vector{A}
     syn::S
 end
@@ -55,9 +56,15 @@ end
 _chunk_size(bt::_Batch) = size(bt.B, ndims(bt.B))
 _chunk_size(::Nothing) = 1
 
+# The plan of `plans` for a chunk of `l` subbands.
+_plan(bt::_Batch, plans::Vector, l::Int) = plans[_chunk_size(bt) - l + 1]
+
+# The leading `l` columns of a stack, along its last axis.
+_leading(A::AbstractArray, l::Int) = selectdim(A, ndims(A), 1:l)
+
 # At most this many spectrum samples per stack when the chunk size is chosen
 # without measuring (`_default_chunk`).
-const _BATCH_SAMPLES = 2^22
+const _BATCH_SAMPLES = 2^21
 
 # `n` subbands in chunks of at most `k`, of near-equal lengths.
 function _even_chunks(n::Int, k::Int)
@@ -83,9 +90,11 @@ function _make_batch(ws::ShearletWorkspace{Td, Tf, N}, k::Int) where {Td, Tf, N}
     proto = ws.rbufs[1][1]
     B = _zeros_like(proto, Complex{Tf}, (rd..., k))
     R = [_zeros_like(proto, Tf, (ws.dims..., k)) for _ in 1:_nchannels(ws)]
+    lens = k:-1:minimum(length, chunks)
     plans = try
         with_fftw_threads(1) do
-            plan_brfft(B, ws.dims[1], 1:N), chunked_syn ? plan_rfft(R[1], 1:N) : nothing
+            [plan_brfft(_leading(B, l), ws.dims[1], 1:N) for l in lens],
+                chunked_syn ? [plan_rfft(_leading(R[1], l), 1:N) for l in lens] : nothing
         end
     catch err
         err isa Union{MethodError, ArgumentError} || rethrow()
@@ -95,8 +104,8 @@ function _make_batch(ws::ShearletWorkspace{Td, Tf, N}, k::Int) where {Td, Tf, N}
     end
     ana = _chunk_masks(ms.ana, chunks, L)
     syn = !chunked_syn ? nothing : ms.syn === ms.ana ? ana : _chunk_masks(ms.syn, chunks, L)
-    acc = _zeros_like(proto, Complex{Tf}, (L, 1))
-    return _Batch(chunks, B, reshape(B, L, k), acc, vec(acc), R, plans..., ana, syn)
+    ones = fill!(similar(B, k), one(eltype(B)))
+    return _Batch(chunks, B, reshape(B, L, k), ones, R, plans..., ana, syn)
 end
 
 function _chunk_masks(masks::Vector{<:_SparseMask}, chunks, L::Int)
@@ -176,10 +185,12 @@ function _chunk_accumulate!(ws, bt::_Batch, ch::_SparseChunk, c::Int, s)
 end
 
 function _chunk_accumulate!(ws, bt::_Batch, M::AbstractMatrix, c::Int, s)
-    Bn = view(bt.Bm, :, 1:size(M, 2))
+    n = size(M, 2)
+    Bn = view(bt.Bm, :, 1:n)
     Bn .*= s .* M
-    sum!(bt.acc, Bn)
-    view(ws.Xm, :, c) .+= bt.acc_v
+    # The column sum as a matrix-vector product, added in place (2× faster than
+    # `sum!` and an addition on an A100 at 256²).
+    mul!(view(ws.Xm, :, c), Bn, view(bt.ones, 1:n), true, true)
     return ws.X
 end
 
@@ -190,30 +201,32 @@ function _chunk_accumulate!(ws, bt::_Batch, ch::_MaskRange, c::Int, s)
     return ws.X
 end
 
-# Analysis in chunks, each handed to `emit(r)` once the leading columns of
-# `bt.R` hold its subbands r (`_columns`).
-function _batched_forward!(emit::E, x::AbstractArray, ws::ShearletWorkspace) where {E}
+# Analysis in chunks: the batched inverse FFT of channel c of the subbands r
+# writes `target(r, c)`, then `emit(r)` runs.
+function _batched_forward!(target::T, emit::E, x::AbstractArray, ws::ShearletWorkspace) where {T, E}
     bt = ws.batch
     _spectra!(ws, x)
     for (q, r) in enumerate(bt.chunks)
+        l = length(r)
         for c in 1:_nchannels(ws)
             _chunk_analysis!(bt, bt.ana[q], ws, c, ws.scale)
-            mul!(bt.R[c], bt.pinv, bt.B)
+            mul!(target(r, c), _plan(bt, bt.pinv, l), _leading(bt.B, l))
         end
         emit(r)
     end
     return nothing
 end
 
-# Synthesis in chunks into `x`; `stage(r)` puts the subbands r into the leading
-# columns of `bt.R`, a channel each.
+# Synthesis in chunks into `x`; `stage(r)` returns the subbands r of each
+# channel, as real arrays of size (dims..., length(r)).
 function _batched_inverse!(stage::S, x::AbstractArray, ws::ShearletWorkspace) where {S}
     bt = ws.batch
     fill!(ws.X, zero(eltype(ws.X)))
     for (q, r) in enumerate(bt.chunks)
-        stage(r)
+        l = length(r)
+        sources = stage(r)
         for c in 1:_nchannels(ws)
-            mul!(bt.B, bt.pfwd, bt.R[c])
+            mul!(_leading(bt.B, l), _plan(bt, bt.pfwd, l), sources[c])
             _chunk_accumulate!(ws, bt, bt.syn[q], c, ws.scale)
         end
     end
@@ -225,39 +238,44 @@ _chunked_synthesis(ws::ShearletWorkspace) = ws.batch !== nothing && ws.batch.syn
 # The columns `js` (a range, or one) of every channel's stack `bt.R`.
 _columns(bt::_Batch, js) = [selectdim(R, ndims(R), js) for R in bt.R]
 
+# Whether the batched FFTs read and write the subbands r of `coeffs` in place.
+_in_place(coeffs::AbstractArray, r, ws::ShearletWorkspace{Td, Tf, N}) where {Td, Tf, N} =
+    Td <: Real && _plannable(_band(coeffs, r), Tf, N + 1)
+
 function _batched_forward_into!(coeffs::AbstractArray, x::AbstractArray, ws::ShearletWorkspace)
     bt = ws.batch
-    _batched_forward!(r -> _combine!(selectdim(coeffs, ndims(coeffs), r), _columns(bt, 1:length(r))), x, ws)
+    target(r, c) = _in_place(coeffs, r, ws) ? _band(coeffs, r) : _leading(bt.R[c], length(r))
+    emit(r) = (_in_place(coeffs, r, ws) || _combine!(_band(coeffs, r), _columns(bt, 1:length(r))); nothing)
+    _batched_forward!(target, emit, x, ws)
     return coeffs
 end
 
 function _batched_inverse_from!(x::AbstractArray, coeffs::AbstractArray, ws::ShearletWorkspace)
     bt = ws.batch
-    return _batched_inverse!(x, ws) do r
-        bands = selectdim(coeffs, ndims(coeffs), r)
-        for (c, Rc) in enumerate(_columns(bt, 1:length(r)))
-            @.. Rc = _channel(bands, c)
+    function stage(r)
+        bands = _band(coeffs, r)
+        _in_place(coeffs, r, ws) && return (bands,)
+        Rs = _columns(bt, 1:length(r))
+        for (c, Rc) in enumerate(Rs)
+            # A copy is faster on a device than the broadcast of `_channel`.
+            eltype(bands) <: Real ? copyto!(Rc, bands) : (@.. Rc = _channel(bands, c))
         end
+        return Rs
     end
+    return _batched_inverse!(stage, x, ws)
 end
 
 # Choosing the chunk size.  Without measuring, a chunk holds at most
-# `_BATCH_SAMPLES` spectrum samples, and grids too large for `_MIN_CHUNK`
-# subbands per chunk are not chunked: their single FFTs fill the device already,
-# and the stacks only add memory traffic.  (On an A100, at 256² one chunk of all
-# 61 band-limited subbands is 5–8× faster than one subband at a time, at 512² and
-# 64³ chunks of 16–32 are 2–3× faster, from 96³ and 1024² on chunking is slower
-# for real data.)  Measuring times every chunk size up to `_BATCH_MAX_SAMPLES`
-# against the per-subband engine.
+# `_BATCH_SAMPLES` spectrum samples.  (On an A100, at 256² one chunk of all 61
+# band-limited subbands is 9–13× faster than one subband at a time, at 512² and
+# 64³ chunks of about 16 are 3–4× faster and at 1024² and 96³ chunks of 3–4
+# 1.3–1.6×; larger chunks gain little and cost memory.)  Measuring times every
+# chunk size up to `_BATCH_MAX_SAMPLES` against the per-subband engine.
 
 const _BATCH_MAX_SAMPLES = 2^23
-const _MIN_CHUNK = 16
 
 # The chunk size used without measuring; below 2 the per-subband engine runs.
-function _default_chunk(ws::ShearletWorkspace)
-    k = _BATCH_SAMPLES ÷ prod(_rfft_dims(ws.dims))
-    return k < _MIN_CHUNK ? 1 : min(_nsubbands(ws), k)
-end
+_default_chunk(ws::ShearletWorkspace) = clamp(_BATCH_SAMPLES ÷ prod(_rfft_dims(ws.dims)), 1, _nsubbands(ws))
 
 # The chunk sizes worth measuring: 1 (the per-subband engine), powers of two,
 # the default and the largest that fits.
@@ -329,8 +347,8 @@ _sync(a::AbstractArray) = (copyto!(Vector{eltype(a)}(undef, 1), 1, vec(a), 1, 1)
 # finalisation, more than once harmlessly; the dense chunks are views of the
 # workspace's masks).
 function _release!(bt::_Batch)
-    foreach(finalize, (bt.B, bt.acc, bt.R..., bt.pinv))
-    bt.pfwd === nothing || finalize(bt.pfwd)
+    foreach(finalize, (bt.B, bt.ones, bt.R..., bt.pinv...))
+    bt.pfwd === nothing || foreach(finalize, bt.pfwd)
     for chunks in (bt.ana, something(bt.syn, ())), ch in chunks
         ch isa _SparseChunk && foreach(finalize, (ch.pts, ch.src, ch.val))
     end

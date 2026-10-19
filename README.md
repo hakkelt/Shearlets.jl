@@ -83,9 +83,9 @@ On the device the subbands are transformed in chunks, one batched FFT per chunk,
 which keeps small grids from being bound by kernel launches; the chunk size
 follows from the grid size. `tune_shearlet_workspace(ws)` measures the fastest
 chunk size on the device instead, in a fraction of a second once compiled.
-The chunks' stacks and batched FFT plans take up to about 100 MB of device
-memory on top of the coefficients; grids too large to chunk, such as 1024² or
-96³, are transformed one subband at a time.
+The chunks' stacks and batched FFT plans take up to about 80 MB of device
+memory on top of the coefficients; grids too large to chunk, such as 128³, are
+transformed one subband at a time.
 
 ## Related packages
 

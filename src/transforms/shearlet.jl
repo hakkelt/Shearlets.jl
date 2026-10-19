@@ -78,12 +78,12 @@ function shearlet_forward!(
     return coeffs
 end
 
-# Subband `i` of a stacked coefficient array.
-_band(coeffs::AbstractArray, i::Int) = selectdim(coeffs, ndims(coeffs), i)
+# Subband `i` (or the subbands in a range) of a stacked coefficient array.
+_band(coeffs::AbstractArray, i::Union{Int, UnitRange{Int}}) = selectdim(coeffs, ndims(coeffs), i)
 
 function _inverse_from!(x::AbstractArray, coeffs::AbstractArray, ws::ShearletWorkspace, threaded::Bool)
     _chunked_synthesis(ws) && return _batched_inverse_from!(x, coeffs, ws)
-    return _engine_inverse!(i -> _band(coeffs, i), x, ws, threaded)
+    return _engine_inverse!(_Bands(coeffs), x, ws, threaded)
 end
 
 function _forward_into!(coeffs::AbstractArray, x::AbstractArray, ws::ShearletWorkspace{Td, Tf, N}, threaded::Bool) where {Td, Tf, N}
@@ -119,11 +119,9 @@ function shearlet_forward(
     if ws.batch === nothing
         _engine_forward!((i, t, c) -> ws.rbufs[t][c], (i, t) -> (give(i, ws.rbufs[t]); nothing), x, ws, false)
     else
-        _batched_forward!(x, ws) do r
-            for (j, i) in enumerate(r)
-                give(i, _columns(ws.batch, j))
-            end
-        end
+        target(r, c) = _leading(ws.batch.R[c], length(r))
+        emit(r) = foreach((j, i) -> give(i, _columns(ws.batch, j)), eachindex(r), r)
+        _batched_forward!(target, emit, x, ws)
     end
     return nothing
 end
@@ -179,14 +177,16 @@ function shearlet_inverse(
     # On the workspace's device.
     x = similar(ws.rbufs[1][1], Td, ws.dims)
     _chunked_synthesis(ws) || return _engine_inverse!(f, x, ws, false)
-    return _batched_inverse!(x, ws) do r
+    function stage(r)
         for (j, i) in enumerate(r)
             band = f(i)
             for (c, Rc) in enumerate(_columns(ws.batch, j))
                 @.. Rc = _channel(band, c)
             end
         end
+        return _columns(ws.batch, 1:length(r))
     end
+    return _batched_inverse!(stage, x, ws)
 end
 
 """

@@ -232,13 +232,7 @@ function _engine_inverse!(source::S, x::AbstractArray, ws::ShearletWorkspace{Td,
                     _mask_accumulate!(a, am, ms.syn[g], F, Fv, c, s)
                 end
             else
-                for i in grp
-                    band = source(i)
-                    for c in 1:nch
-                        rb = rbs[c]
-                        i == first(grp) ? (@.. rb = _channel(band, c)) : (@.. rb += _channel(band, c))
-                    end
-                end
+                _group_sum!(rbs, source, grp)
                 for c in 1:nch
                     mul!(F, ws.pfwd, rbs[c])
                     _mask_accumulate!(a, am, ms.syn[g], F, Fv, c, s)
@@ -247,6 +241,40 @@ function _engine_inverse!(source::S, x::AbstractArray, ws::ShearletWorkspace{Td,
         end
     end
     return _finish_inverse!(x, ws)
+end
+
+# The subbands of a stacked coefficient array, as a `source` of `_engine_inverse!`.
+struct _Bands{A <: AbstractArray}
+    coeffs::A
+end
+
+(b::_Bands)(i::Int) = selectdim(b.coeffs, ndims(b.coeffs), i)
+
+# rbs[c] = channel c of the sum of the subbands `grp`, a kernel per subband.
+function _group_sum!(rbs::Vector, source, grp::UnitRange{Int})
+    for i in grp
+        band = source(i)
+        for c in eachindex(rbs)
+            rb = rbs[c]
+            i == first(grp) ? (@.. rb = _channel(band, c)) : (@.. rb += _channel(band, c))
+        end
+    end
+    return rbs
+end
+
+# On a device, stacked subbands are summed by one reduction per channel instead,
+# which pays from about 512² on.  (NSST on an A100:
+# 0.35 → 0.60 ms at 256², 0.51 → 0.28 ms at 512², 1.04 → 0.63 ms at 1024².)
+const _GROUP_SUM_SAMPLES = 2^18
+
+function _group_sum!(rbs::Vector, source::_Bands, grp::UnitRange{Int})
+    rb1 = first(rbs)
+    (_on_host(rb1) || length(rb1) < _GROUP_SUM_SAMPLES) && return @invoke _group_sum!(rbs::Vector, source::Any, grp::UnitRange{Int})
+    bands = selectdim(source.coeffs, ndims(source.coeffs), grp)
+    for (c, rb) in enumerate(rbs)
+        sum!(v -> _channel(v, c), reshape(rb, size(rb)..., 1), bands)
+    end
+    return rbs
 end
 
 # x = the inverse FFT of the synthesis sum in ws.X, after the post-factor.

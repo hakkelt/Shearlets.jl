@@ -34,6 +34,7 @@ shearlet_inverse
 shearlet_inverse!
 ShearletWorkspace
 make_shearlet_workspace
+tune_shearlet_workspace
 ```
 
 ## Re-exported from MultiscaleFilterBanks

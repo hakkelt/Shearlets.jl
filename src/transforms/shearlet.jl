@@ -81,7 +81,13 @@ end
 # Subband `i` of a stacked coefficient array.
 _band(coeffs::AbstractArray, i::Int) = selectdim(coeffs, ndims(coeffs), i)
 
+function _inverse_from!(x::AbstractArray, coeffs::AbstractArray, ws::ShearletWorkspace, threaded::Bool)
+    _chunked_synthesis(ws) && return _batched_inverse_from!(x, coeffs, ws)
+    return _engine_inverse!(i -> _band(coeffs, i), x, ws, threaded)
+end
+
 function _forward_into!(coeffs::AbstractArray, x::AbstractArray, ws::ShearletWorkspace{Td, Tf, N}, threaded::Bool) where {Td, Tf, N}
+    ws.batch === nothing || return _batched_forward_into!(coeffs, x, ws)
     # Every slice is aligned if the first two are: they are equally spaced.
     if _nchannels(ws) == 1 && all(i -> _plannable(_band(coeffs, i), Tf, N), 1:min(2, size(coeffs, N + 1)))
         # Real data into dense slices: the inverse FFT writes the subbands.
@@ -109,9 +115,16 @@ function shearlet_forward(
     Td = data_eltype(x)
     ws = _workspace(workspace, sys, size(x), Td, false)
     out = Td <: Real ? nothing : similar(x, Td)
-    target(i, t, c) = ws.rbufs[t][c]
-    emit(i, t) = (f(i, out === nothing ? ws.rbufs[t][1] : _combine!(out, ws.rbufs[t])); nothing)
-    _engine_forward!(target, emit, x, ws, false)
+    give(i, bands) = f(i, out === nothing ? bands[1] : _combine!(out, bands))
+    if ws.batch === nothing
+        _engine_forward!((i, t, c) -> ws.rbufs[t][c], (i, t) -> (give(i, ws.rbufs[t]); nothing), x, ws, false)
+    else
+        _batched_forward!(x, ws) do r
+            for (j, i) in enumerate(r)
+                give(i, _columns(ws.batch, j))
+            end
+        end
+    end
     return nothing
 end
 
@@ -147,7 +160,7 @@ function shearlet_inverse!(
     use_threads = _threaded(threaded)
     ws = _workspace(workspace, sys, size(x), data_eltype(x), use_threads)
     _check_coefficients(coeffs, ws)
-    return _engine_inverse!(i -> _band(coeffs, i), x, ws, use_threads)
+    return _inverse_from!(x, coeffs, ws, use_threads)
 end
 
 """
@@ -165,7 +178,15 @@ function shearlet_inverse(
     ws = _workspace(workspace, sys, Tuple(dims), Td, false)
     # On the workspace's device.
     x = similar(ws.rbufs[1][1], Td, ws.dims)
-    return _engine_inverse!(f, x, ws, false)
+    _chunked_synthesis(ws) || return _engine_inverse!(f, x, ws, false)
+    return _batched_inverse!(x, ws) do r
+        for (j, i) in enumerate(r)
+            band = f(i)
+            for (c, Rc) in enumerate(_columns(ws.batch, j))
+                @.. Rc = _channel(band, c)
+            end
+        end
+    end
 end
 
 """

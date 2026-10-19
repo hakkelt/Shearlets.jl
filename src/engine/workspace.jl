@@ -28,7 +28,7 @@ same time; it threads internally instead.
 struct ShearletWorkspace{
         Td, Tf, N, S <: ShearletSystem, MS <: _MaskSet,
         C <: AbstractArray{Complex{Tf}}, CM <: AbstractMatrix{Complex{Tf}}, B <: AbstractArray{Complex{Tf}, N},
-        V <: AbstractVector{Complex{Tf}}, R <: AbstractArray{Tf, N}, P, Q,
+        V <: AbstractVector{Complex{Tf}}, R <: AbstractArray{Tf, N}, P, Q, BT,
     }
     system::S
     dims::NTuple{N, Int}
@@ -43,6 +43,7 @@ struct ShearletWorkspace{
     pfwd::P                 # rfft, real data → spectrum
     pinv::Q                 # unnormalised inverse (brfft)
     scale::Tf               # 1 / prod(dims)
+    batch::BT               # `_Batch`: subbands transformed in chunks (devices), or `nothing`
 end
 
 _nchannels(::Type{<:Real}) = 1
@@ -88,23 +89,37 @@ function _assemble_workspace(
     ) where {F, N, Td, Tf}
     nch = _nchannels(Td)
     rd = _rfft_dims(dims)
-    zeroed(T, sz) = fill!(similar(proto, T, sz), zero(T))
-    X = zeroed(Complex{Tf}, (rd..., nch))
+    X = _zeros_like(proto, Complex{Tf}, (rd..., nch))
     # The inverse runs at most one task per synthesis group.
     partials = [similar(X) for _ in 2:min(nt, length(masks.groups))]
-    bufs = [zeroed(Complex{Tf}, rd) for _ in 1:nt]
-    rbufs = [[zeroed(Tf, dims) for _ in 1:nch] for _ in 1:nt]
+    bufs = [_zeros_like(proto, Complex{Tf}, rd) for _ in 1:nt]
+    rbufs = [[_zeros_like(proto, Tf, dims) for _ in 1:nch] for _ in 1:nt]
     pfwd, pinv = plans(rbufs[1][1], bufs[1])
-    Xm = reshape(X, :, nch)
-    bufs_v = [vec(b) for b in bufs]
-    return ShearletWorkspace{
-        Td, Tf, N, typeof(sys), typeof(masks), typeof(X), typeof(Xm), eltype(bufs),
-        eltype(bufs_v), eltype(eltype(rbufs)), typeof(pfwd), typeof(pinv),
-    }(
-        sys, dims, masks, X, Xm, partials, [reshape(p, :, nch) for p in partials],
-        bufs, bufs_v, rbufs, pfwd, pinv, Tf(1 / prod(dims))
+    return ShearletWorkspace{Td}(
+        sys, dims, masks, X, reshape(X, :, nch), partials, [reshape(p, :, nch) for p in partials],
+        bufs, [vec(b) for b in bufs], rbufs, pfwd, pinv, Tf(1 / prod(dims)), nothing
     )
 end
+
+# A zeroed array like `proto` (host or device).
+_zeros_like(proto::AbstractArray, ::Type{T}, sz::Tuple) where {T} = fill!(similar(proto, T, sz), zero(T))
+
+# A workspace from its fields, the type parameters after `Td` from their types.
+function ShearletWorkspace{Td}(
+        sys, dims::NTuple{N, Int}, masks, X::AbstractArray{Complex{Tf}}, Xm, partials, partials_m,
+        bufs, bufs_v, rbufs, pfwd, pinv, scale, batch
+    ) where {Td, Tf, N}
+    return ShearletWorkspace{
+        Td, Tf, N, typeof(sys), typeof(masks), typeof(X), typeof(Xm), eltype(bufs),
+        eltype(bufs_v), eltype(eltype(rbufs)), typeof(pfwd), typeof(pinv), typeof(batch),
+    }(sys, dims, masks, X, Xm, partials, partials_m, bufs, bufs_v, rbufs, pfwd, pinv, scale, batch)
+end
+
+# `ws` with the chunked path `batch` (`nothing` for none).
+_with_batch(ws::ShearletWorkspace, batch) = ShearletWorkspace{eltype(ws)}(
+    ws.system, ws.dims, ws.masks, ws.X, ws.Xm, ws.partials, ws.partials_m,
+    ws.bufs, ws.bufs_v, ws.rbufs, ws.pfwd, ws.pinv, ws.scale, batch
+)
 
 # The masks of `system` at size `dims`, after `shearlet_layout` checked that the
 # system supports that many dimensions.
@@ -163,15 +178,7 @@ _channel(x::Complex, c::Int) = c == 1 ? real(x) : imag(x)
 # array the inverse FFT writes to directly.
 function _engine_forward!(target::F, emit::G, x::AbstractArray, ws::ShearletWorkspace{Td, Tf, N}, threaded::Bool) where {F, G, Td, Tf, N}
     nch = _nchannels(ws)
-    for c in 1:nch
-        Xc = selectdim(ws.X, N + 1, c)
-        # Channel 2 is misaligned when the spectrum has an odd length in Float32.
-        if _plannable(Xc, Complex{Tf}, N)
-            _rfft_channel!(Xc, ws.pfwd, x, c, ws.rbufs[1][1])
-        else
-            copyto!(Xc, _rfft_channel!(ws.bufs[1], ws.pfwd, x, c, ws.rbufs[1][1]))
-        end
-    end
+    _spectra!(ws, x)
     s = ws.scale
     ana = ws.masks.ana
     foreach_chunk(length(ana), _ntasks(ws), threaded) do range, t
@@ -185,6 +192,20 @@ function _engine_forward!(target::F, emit::G, x::AbstractArray, ws::ShearletWork
         end
     end
     return nothing
+end
+
+# ws.X = the spectra of the channels of `x`.
+function _spectra!(ws::ShearletWorkspace{Td, Tf, N}, x::AbstractArray) where {Td, Tf, N}
+    for c in 1:_nchannels(ws)
+        Xc = selectdim(ws.X, N + 1, c)
+        # Channel 2 is misaligned when the spectrum has an odd length in Float32.
+        if _plannable(Xc, Complex{Tf}, N)
+            _rfft_channel!(Xc, ws.pfwd, x, c, ws.rbufs[1][1])
+        else
+            copyto!(Xc, _rfft_channel!(ws.bufs[1], ws.pfwd, x, c, ws.rbufs[1][1]))
+        end
+    end
+    return ws.X
 end
 
 # Synthesis into `x` from the subbands `source(i)` (arrays of the data size): per
@@ -225,9 +246,18 @@ function _engine_inverse!(source::S, x::AbstractArray, ws::ShearletWorkspace{Td,
             end
         end
     end
+    return _finish_inverse!(x, ws)
+end
+
+# x = the inverse FFT of the synthesis sum in ws.X, after the post-factor.
+function _finish_inverse!(x::AbstractArray, ws::ShearletWorkspace{Td, Tf, N}) where {Td, Tf, N}
+    nch = _nchannels(ws)
+    ms = ws.masks
     if ms.post !== nothing
+        post = ms.post
         for c in 1:nch
-            selectdim(ws.X, N + 1, c) .*= ms.post
+            Xc = selectdim(ws.X, N + 1, c)
+            @.. Xc *= post
         end
     end
     if nch == 1 && _plannable(x, Tf, N)
@@ -247,4 +277,10 @@ function _engine_inverse!(source::S, x::AbstractArray, ws::ShearletWorkspace{Td,
 end
 
 # dst = the array of channels `r` (one real channel, or real and imaginary).
-_combine!(dst::AbstractArray, r::AbstractVector) = length(r) == 1 ? (dst .= r[1]) : (dst .= complex.(r[1], r[2]))
+# (`@..`: Base's broadcast into a slice of the stacked subbands is ~5× slower.)
+function _combine!(dst::AbstractArray, r::AbstractVector)
+    r1 = r[1]
+    length(r) == 1 && return @.. dst = r1
+    r2 = r[2]
+    return @.. dst = complex(r1, r2)
+end

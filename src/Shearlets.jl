@@ -10,6 +10,7 @@ the DFT grid.
 |----------|-------------|
 | `shearlet_forward` / `shearlet_inverse` | Transform and its inverse; a streaming form of each |
 | `make_shearlet_workspace` | Masks, plans and buffers for repeated transforms |
+| `tune_shearlet_workspace` | Measure the fastest chunk size of a device workspace |
 | `shearlet_layout` / `shearlet_nsubbands` | What each subband is |
 | `shearlet_spectra` | The frequency responses, for inspection |
 
@@ -34,7 +35,7 @@ using FastBroadcast: @..
 
 using MultiscaleFilterBanks: MultiscaleFilterBanks,
     FilterPair, CDF97, upsample_filter,
-    data_eltype, n_tasks, foreach_chunk, chunked_sum!, loop_threaded, with_fftw_threads, nsp_responses
+    data_eltype, n_tasks, foreach_chunk, chunked_sum!, loop_threaded, with_fftw_threads, nsp_responses, _chunk
 
 # ── Types ─────────────────────────────────────────────────────────────────────
 include("types/index.jl")
@@ -43,6 +44,7 @@ include("types/system.jl")
 # ── Mask engine ───────────────────────────────────────────────────────────────
 include("engine/masks.jl")
 include("engine/workspace.jl")
+include("engine/batched.jl")
 
 # ── Shearlet systems ──────────────────────────────────────────────────────────
 include("systems/windows.jl")
@@ -62,7 +64,7 @@ export
     shearlet_layout, shearlet_nsubbands, shearlet_spectra,
 
     # Transforms
-    ShearletWorkspace, make_shearlet_workspace,
+    ShearletWorkspace, make_shearlet_workspace, tune_shearlet_workspace,
     shearlet_forward, shearlet_forward!, shearlet_inverse, shearlet_inverse!
 
 end # module

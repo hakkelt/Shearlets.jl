@@ -68,9 +68,12 @@ _MaskSet(ana::Vector; post = nothing) = _MaskSet(ana, ana, [i:i for i in eachind
 
 # Z = s · A · X with X channel c of the spectra (as the N+1-dimensional `X` and
 # as the matrix `Xm`); Zv is Z as a vector.
+# The sparse views skip their bounds check: on a device it reduces the index
+# array and reads the result back, a synchronisation per subband.  The support
+# indices lie on the grid by construction.
 function _mask_apply!(Z, Zv, m::_SparseMask, X, Xm, c::Int, s)
     fill!(Z, zero(eltype(Z)))
-    view(Zv, m.idx) .= (m.val .* s) .* view(Xm, m.idx, c)
+    @inbounds view(Zv, m.idx) .= (m.val .* s) .* view(Xm, m.idx, c)
     return Z
 end
 
@@ -87,7 +90,7 @@ end
 
 # Channel c of the accumulator (the N+1-dimensional `a`, or the matrix `am`) += s · S · F.
 function _mask_accumulate!(a, am, m::_SparseMask, F, Fv, c::Int, s)
-    view(am, m.idx, c) .+= (m.val .* s) .* view(Fv, m.idx)
+    @inbounds view(am, m.idx, c) .+= (m.val .* s) .* view(Fv, m.idx)
     return am
 end
 

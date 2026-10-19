@@ -79,6 +79,14 @@ ws = Adapt.adapt(CuArray, make_shearlet_workspace(Float32, size(x), sys))
 c = shearlet_forward(CuArray(x), sys; workspace = ws)
 ```
 
+On the device the subbands are transformed in chunks, one batched FFT per chunk,
+which keeps small grids from being bound by kernel launches; the chunk size
+follows from the grid size. `tune_shearlet_workspace(ws)` measures the fastest
+chunk size on the device instead, in a fraction of a second once compiled.
+The chunks' stacks and batched FFT plans take up to about 100 MB of device
+memory on top of the coefficients; grids too large to chunk, such as 1024² or
+96³, are transformed one subband at a time.
+
 ## Related packages
 
 [Contourlets.jl](https://github.com/hakkelt/Contourlets.jl) (2-D contourlets)

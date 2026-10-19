@@ -19,19 +19,12 @@ end
     @test Base.get_extension(Shearlets, :ShearletsAdaptExt) !== nothing
 end
 
-@testitem "GPU shearlet transforms match the CPU" tags = [:gpu] setup = [GPUBackends] begin
+@testitem "GPU shearlet transforms match the CPU" tags = [:gpu] setup = [GPUBackends, ChunkCases] begin
     using GPUEnv, Random
     const Adapt = GPUBackends.Adapt
     rng = Xoshiro(42)
-    cases = [
-        (BandlimitedShearlets(scales = 2), (64, 48)),
-        (NSSTShearlets(directions = [2, 3]), (64, 64)),
-        (CompactShearlets(scales = 2), (64, 64)),
-        (BandlimitedShearlets(scales = 1), (16, 20, 24)),
-        (CompactShearlets(scales = 1), (16, 16, 16)),
-    ]
-    for (sys, dims) in cases, T in (Float32, ComplexF32)
-        x = T <: Real ? randn(rng, Float32, dims...) : complex.(randn(rng, Float32, dims...), randn(rng, Float32, dims...))
+    for (sys, dims) in ChunkCases.cases, T in (Float32, ComplexF32)
+        x = ChunkCases.random_input(rng, T, dims)
         cpu = make_shearlet_workspace(T, dims, sys)
         ref = shearlet_forward(x, sys; workspace = cpu)
         for backend in GPUBackends.fft_backends
@@ -45,6 +38,35 @@ end
             y = shearlet_inverse(i -> selectdim(c, ndims(c), i), sys, dims; T = T, workspace = ws)
             @test y isa typeof(xg).name.wrapper
             @test maximum(abs, Array(y) .- x) < 1.0f-4 * maximum(abs, x)
+            # CUDA has batched plans, so the workspace is chunked (one chunk at these sizes).
+            typeof(xg).name.name === :CuArray && @test ws.batch !== nothing
+        end
+    end
+end
+
+@testitem "GPU chunked transforms match the CPU" tags = [:gpu] setup = [GPUBackends, ChunkCases] begin
+    using GPUEnv, Random
+    const Adapt = GPUBackends.Adapt
+    const S = Shearlets
+    rng = Xoshiro(5)
+    for (sys, dims) in ChunkCases.cases, T in (Float32, ComplexF32)
+        x = ChunkCases.random_input(rng, T, dims)
+        cpu = make_shearlet_workspace(T, dims, sys)
+        ref = shearlet_forward(x, sys; workspace = cpu)
+        for backend in GPUBackends.fft_backends
+            xg = to_gpu(backend, x)
+            ws = Adapt.adapt(typeof(xg).name.wrapper, cpu)
+            # Uneven chunks with a short last one, and chunks of two.
+            for k in (5, 2)
+                wb = S._with_batch(ws, S._make_batch(ws, k))
+                c = shearlet_forward(xg, sys; workspace = wb)
+                @test maximum(abs, Array(c) .- ref) < 1.0f-4 * maximum(abs, ref)
+                @test maximum(abs, Array(shearlet_inverse(c, sys; workspace = wb)) .- x) < 1.0f-4 * maximum(abs, x)
+            end
+            tw = tune_shearlet_workspace(ws)
+            c = shearlet_forward(xg, sys; workspace = tw)
+            @test maximum(abs, Array(c) .- ref) < 1.0f-4 * maximum(abs, ref)
+            @test maximum(abs, Array(shearlet_inverse(c, sys; workspace = tw)) .- x) < 1.0f-4 * maximum(abs, x)
         end
     end
 end

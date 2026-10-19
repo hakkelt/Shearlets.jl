@@ -51,6 +51,9 @@ FFT. The pieces:
   level's subbands in space and pays one FFT per level.
 - `src/engine/workspace.jl` — buffers, plans, and the threaded forward/inverse
   loops over subbands.
+- `src/engine/batched.jl` — the chunked path device workspaces take: a chunk of
+  subbands per batched FFT, fused chunk masks, the default chunk size and
+  `tune_shearlet_workspace`.  Its code is generic, so host tests exercise it.
 - `src/transforms/shearlet.jl` — the public API.
 - `ext/ShearletsAdaptExt.jl` — the GPU path, `Adapt.adapt_structure` only.
 

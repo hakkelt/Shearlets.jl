@@ -16,7 +16,7 @@ Unlike the contourlet / surfacelet split, one package covers both dimensions:
 the cone-adapted construction is the same in 2-D and 3-D (two cones, three
 pyramids), with no lattice that only exists in the plane.
 
-The surface shared with the core: `FilterPair`, `CDF97`, and the internals `data_eltype`, `n_tasks`, `foreach_chunk`, `chunked_sum!`,
+The surface shared with the core: `FilterPair`, `CDF97`, and the internals `data_eltype`, `n_tasks`, `foreach_chunk`, `_chunk`, `chunked_sum!`,
 `loop_threaded`, `with_fftw_threads`, `upsample_filter` and `nsp_responses` (the NSST pyramid), imported in
 `src/Shearlets.jl`.
 

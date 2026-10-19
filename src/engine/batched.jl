@@ -120,7 +120,7 @@ function _chunk_masks(masks::Vector{<:_SparseMask}, chunks, L::Int)
         count[pts] .= 0
         perm = sortperm(layer)
         sorted = layer[perm]
-        layers = [searchsortedfirst(sorted, l):searchsortedlast(sorted, l) for l in 1:maximum(sorted)]
+        layers = [searchsortedfirst(sorted, l):searchsortedlast(sorted, l) for l in 1:maximum(sorted; init = 0)]
         idx = first(sub).idx
         _SparseChunk(_like(idx, pts[perm]), _like(idx, src[perm]), _like(first(sub).val, val[perm]), layers)
     end
@@ -137,7 +137,7 @@ _chunk_masks(masks::Vector, chunks, L::Int) = [_MaskRange(view(masks, r)) for r 
 _like(a::AbstractArray, v::Vector) = copyto!(similar(a, eltype(v), length(v)), v)
 
 # The dense masks as the columns of one matrix: the matrix they are views of
-# when they are its consecutive columns (device masks, see the Adapt
+# when they are its consecutive columns (adapted masks, see the Adapt
 # extension), else a new one.
 function _dense_stack(masks::Vector{<:_DenseMask})
     v1 = first(masks).val
@@ -317,7 +317,8 @@ function _tune_batch(ws::ShearletWorkspace{Td}; candidates = _chunk_candidates(w
     x = _zeros_like(ws.rbufs[1][1], Td, ws.dims)
     c = _zeros_like(ws.rbufs[1][1], Td, (ws.dims..., _nsubbands(ws)))
     best, tbest = ws.batch, _time_transforms(ws, x, c)
-    for k in candidates
+    # Candidates that give the same chunks are timed once.
+    for k in unique!([maximum(length, _even_chunks(_nsubbands(ws), k)) for k in candidates])
         k == _chunk_size(ws.batch) && continue
         bt = k < 2 ? nothing : _make_batch(ws, k)
         t = _time_transforms(_with_batch(ws, bt), x, c)

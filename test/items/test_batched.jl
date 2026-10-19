@@ -51,14 +51,18 @@ end
     x = randn(Xoshiro(3), Float32, dims...)
     ws = make_shearlet_workspace(Float32, dims, sys)
     ref = shearlet_forward(x, sys; workspace = ws)
-    # The extension stacks the dense masks into one matrix and chunks them by default.
-    dw = Adapt.adapt(Array, ws)
-    @test dw.batch !== nothing && S._chunk_size(dw.batch) == S._default_chunk(dw)
-    @test dw.masks.ana[1].val isa SubArray
+    # The extension stacks the dense masks into one matrix, and the chunks are
+    # views of it; it chunks device workspaces only.
+    hw = Adapt.adapt(Array, ws)
+    @test hw.batch === nothing && hw.masks.syn === hw.masks.ana
+    @test hw.masks.ana[1].val isa SubArray
+    dw = S._with_batch(hw, S._make_batch(hw, S._default_chunk(hw)))
     @test parent(dw.batch.ana[1]) === parent(dw.masks.ana[1].val)
+    @test dw.batch.syn === dw.batch.ana
     @test shearlet_forward(x, sys; workspace = dw) ≈ ref
     # Tuning keeps a chunked path or drops it, and the transform is the same.
     tw = S._tune_batch(dw; candidates = [1, 2, 8])
-    @test S._chunk_size(tw.batch) in (1, 2, 8, S._chunk_size(dw.batch))
+    sizes = [maximum(length, S._even_chunks(S._nsubbands(dw), k)) for k in (1, 2, 8)]
+    @test S._chunk_size(tw.batch) in (sizes..., S._chunk_size(dw.batch))
     @test shearlet_forward(x, sys; workspace = tw) ≈ ref
 end

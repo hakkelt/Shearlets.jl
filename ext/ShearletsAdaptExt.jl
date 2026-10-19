@@ -32,8 +32,10 @@ function _stack_dense!(to, ms::_MaskSet, cache::IdDict)
     vals = unique(objectid, [m.val for m in vcat(ms.ana, ms.syn) if m isa _DenseMask])
     isempty(vals) && return cache
     M = Adapt.adapt(to, reduce(hcat, vals))
+    # `SubArray`s, which `_dense_stack` recognises: a device array's `view` of a
+    # column is a new device array instead.
     for (j, v) in enumerate(vals)
-        cache[v] = view(M, :, j)
+        cache[v] = SubArray(M, (Base.Slice(axes(M, 1)), j))
     end
     return cache
 end
@@ -46,17 +48,18 @@ function Adapt.adapt_structure(to, ws::ShearletWorkspace{Td, Tf, N}) where {Td, 
     cache = IdDict{Any, Any}()
     ms = ws.masks
     _stack_dense!(to, ms, cache)
-    masks = _MaskSet(
-        [_adapt_mask(to, m, cache) for m in ms.ana], [_adapt_mask(to, m, cache) for m in ms.syn],
-        ms.groups, _adapt_shared(to, ms.post, cache),
-    )
+    ana = [_adapt_mask(to, m, cache) for m in ms.ana]
+    # The synthesis masks stay the analysis masks, so the chunks share them too.
+    syn = ms.syn === ms.ana ? ana : [_adapt_mask(to, m, cache) for m in ms.syn]
+    masks = _MaskSet(ana, syn, ms.groups, _adapt_shared(to, ms.post, cache))
     proto = Adapt.adapt(to, Array{Tf, N}(undef, ntuple(_ -> 0, N)))
     nt = Shearlets.n_tasks(proto, length(ms.ana))
     dws = Shearlets._assemble_workspace(ws.system, ws.dims, Td, masks, proto, nt) do rbuf, buf
         Shearlets.plan_rfft(rbuf), Shearlets.plan_brfft(buf, ws.dims[1])
     end
+    # A host workspace threads over subbands instead.
     k = Shearlets._default_chunk(dws)
-    k < 2 && return dws
+    (k < 2 || Shearlets._on_host(proto)) && return dws
     # `nothing`, the per-subband engine, when the FFT library has no batched plans.
     return Shearlets._with_batch(dws, Shearlets._make_batch(dws, k))
 end

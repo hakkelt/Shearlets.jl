@@ -119,7 +119,7 @@ function shearlet_forward(
     if ws.batch === nothing
         _engine_forward!((i, t, c) -> ws.rbufs[t][c], (i, t) -> (give(i, ws.rbufs[t]); nothing), x, ws, false)
     else
-        target(r, c) = _leading(ws.batch.R[c], length(r))
+        target(r, c) = leading_slices(ws.batch.R[c], length(r))
         emit(r) = foreach((j, i) -> give(i, _columns(ws.batch, j)), eachindex(r), r)
         _batched_forward!(target, emit, x, ws)
     end

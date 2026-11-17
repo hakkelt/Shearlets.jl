@@ -36,7 +36,7 @@ using FastBroadcast: @..
 using MultiscaleFilterBanks: MultiscaleFilterBanks,
     FilterPair, CDF97, upsample_filter,
     data_eltype, n_tasks, foreach_chunk, chunked_sum!, loop_threaded, with_fftw_threads, nsp_responses,
-    _even_chunks, _leading, _BATCH_SAMPLES
+    even_chunks, leading_slices, DEFAULT_CHUNK_SAMPLES
 
 # ── Types ─────────────────────────────────────────────────────────────────────
 include("types/index.jl")

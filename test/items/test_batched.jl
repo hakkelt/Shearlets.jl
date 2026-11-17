@@ -62,7 +62,7 @@ end
     @test shearlet_forward(x, sys; workspace = dw) ≈ ref
     # Tuning keeps a chunked path or drops it, and the transform is the same.
     tw = S._tune_batch(dw; candidates = [1, 2, 8])
-    sizes = [maximum(length, S._even_chunks(S._nsubbands(dw), k)) for k in (1, 2, 8)]
+    sizes = [maximum(length, S.even_chunks(S._nsubbands(dw), k)) for k in (1, 2, 8)]
     @test S._chunk_size(tw.batch) in (sizes..., S._chunk_size(dw.batch))
     @test shearlet_forward(x, sys; workspace = tw) ≈ ref
 end

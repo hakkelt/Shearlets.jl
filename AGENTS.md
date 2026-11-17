@@ -18,7 +18,7 @@ pyramids), with no lattice that only exists in the plane.
 
 The surface shared with the core: `FilterPair`, `CDF97`, and the internals `data_eltype`, `n_tasks`, `foreach_chunk`, `chunked_sum!`,
 `loop_threaded`, `with_fftw_threads`, `upsample_filter`, `nsp_responses` (the NSST pyramid) and the
-chunking helpers `_even_chunks`, `_leading` and `_BATCH_SAMPLES`, imported in `src/Shearlets.jl`.
+chunking helpers `even_chunks`, `leading_slices` and `DEFAULT_CHUNK_SAMPLES`, imported in `src/Shearlets.jl`.
 
 **First checkout**: `MultiscaleFilterBanks.jl` is unregistered and expected as a
 sibling directory, wired in through `[sources]`. On Julia 1.10, which does not

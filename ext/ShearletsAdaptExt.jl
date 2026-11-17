@@ -20,6 +20,8 @@ module ShearletsAdaptExt
 
 using Shearlets: Shearlets, ShearletWorkspace, _MaskSet, _SparseMask, _DenseMask, _ProductMask
 using Adapt: Adapt
+using FFTW: plan_rfft, plan_brfft
+using MultiscaleFilterBanks: n_tasks
 
 # Arrays shared between masks (a factor common to many subbands, a synthesis mask
 # that is an analysis mask) stay shared on the device.
@@ -53,9 +55,9 @@ function Adapt.adapt_structure(to, ws::ShearletWorkspace{Td, Tf, N}) where {Td, 
     syn = ms.syn === ms.ana ? ana : [_adapt_mask(to, m, cache) for m in ms.syn]
     masks = _MaskSet(ana, syn, ms.groups, _adapt_shared(to, ms.post, cache))
     proto = Adapt.adapt(to, Array{Tf, N}(undef, ntuple(_ -> 0, N)))
-    nt = Shearlets.n_tasks(proto, length(ms.ana))
+    nt = n_tasks(proto, length(ms.ana))
     dws = Shearlets._assemble_workspace(ws.system, ws.dims, Td, masks, proto, nt) do rbuf, buf
-        Shearlets.plan_rfft(rbuf), Shearlets.plan_brfft(buf, ws.dims[1])
+        plan_rfft(rbuf), plan_brfft(buf, ws.dims[1])
     end
     # A host workspace threads over subbands instead.
     k = Shearlets._default_chunk(dws)

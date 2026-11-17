@@ -67,7 +67,7 @@ buffers are like `ws`'s (host or device) and its plans are AbstractFFTs plans of
 them.  `nothing` when the FFT library has no batched plans.
 """
 function _make_batch(ws::ShearletWorkspace{Td, Tf, N}, k::Int) where {Td, Tf, N}
-    chunks = _even_chunks(_nsubbands(ws), k)
+    chunks = even_chunks(_nsubbands(ws), k)
     k = maximum(length, chunks)
     rd = _rfft_dims(ws.dims)
     L = prod(rd)
@@ -80,8 +80,8 @@ function _make_batch(ws::ShearletWorkspace{Td, Tf, N}, k::Int) where {Td, Tf, N}
     lens = k:-1:minimum(length, chunks)
     plans = try
         with_fftw_threads(1) do
-            [plan_brfft(_leading(B, l), ws.dims[1], 1:N) for l in lens],
-                chunked_syn ? [plan_rfft(_leading(R[1], l), 1:N) for l in lens] : nothing
+            [plan_brfft(leading_slices(B, l), ws.dims[1], 1:N) for l in lens],
+                chunked_syn ? [plan_rfft(leading_slices(R[1], l), 1:N) for l in lens] : nothing
         end
     catch err
         err isa Union{MethodError, ArgumentError} || rethrow()
@@ -197,7 +197,7 @@ function _batched_forward!(target::T, emit::E, x::AbstractArray, ws::ShearletWor
         l = length(r)
         for c in 1:_nchannels(ws)
             _chunk_analysis!(bt, bt.ana[q], ws, c, ws.scale)
-            mul!(target(r, c), _plan(bt, bt.pinv, l), _leading(bt.B, l))
+            mul!(target(r, c), _plan(bt, bt.pinv, l), leading_slices(bt.B, l))
         end
         emit(r)
     end
@@ -213,7 +213,7 @@ function _batched_inverse!(stage::S, x::AbstractArray, ws::ShearletWorkspace) wh
         l = length(r)
         sources = stage(r)
         for c in 1:_nchannels(ws)
-            mul!(_leading(bt.B, l), _plan(bt, bt.pfwd, l), sources[c])
+            mul!(leading_slices(bt.B, l), _plan(bt, bt.pfwd, l), sources[c])
             _chunk_accumulate!(ws, bt, bt.syn[q], c, ws.scale)
         end
     end
@@ -231,7 +231,7 @@ _in_place(coeffs::AbstractArray, r, ws::ShearletWorkspace{Td, Tf, N}) where {Td,
 
 function _batched_forward_into!(coeffs::AbstractArray, x::AbstractArray, ws::ShearletWorkspace)
     bt = ws.batch
-    target(r, c) = _in_place(coeffs, r, ws) ? _band(coeffs, r) : _leading(bt.R[c], length(r))
+    target(r, c) = _in_place(coeffs, r, ws) ? _band(coeffs, r) : leading_slices(bt.R[c], length(r))
     emit(r) = (_in_place(coeffs, r, ws) || _combine!(_band(coeffs, r), _columns(bt, 1:length(r))); nothing)
     _batched_forward!(target, emit, x, ws)
     return coeffs
@@ -253,14 +253,14 @@ function _batched_inverse_from!(x::AbstractArray, coeffs::AbstractArray, ws::She
 end
 
 # Choosing the chunk size.  Without measuring, a chunk holds at most
-# `_BATCH_SAMPLES` spectrum samples (MultiscaleFilterBanks' default for batched
+# `DEFAULT_CHUNK_SAMPLES` spectrum samples (MultiscaleFilterBanks' default for batched
 # device transforms, chosen on these subbands).  Measuring times every chunk size
 # up to `_BATCH_MAX_SAMPLES` against the per-subband engine.
 
 const _BATCH_MAX_SAMPLES = 2^23
 
 # The chunk size used without measuring; below 2 the per-subband engine runs.
-_default_chunk(ws::ShearletWorkspace) = clamp(_BATCH_SAMPLES ÷ prod(_rfft_dims(ws.dims)), 1, _nsubbands(ws))
+_default_chunk(ws::ShearletWorkspace) = clamp(DEFAULT_CHUNK_SAMPLES ÷ prod(_rfft_dims(ws.dims)), 1, _nsubbands(ws))
 
 # The chunk sizes worth measuring: 1 (the per-subband engine), powers of two,
 # the default and the largest that fits.
@@ -303,7 +303,7 @@ function _tune_batch(ws::ShearletWorkspace{Td}; candidates = _chunk_candidates(w
     c = _zeros_like(ws.rbufs[1][1], Td, (ws.dims..., _nsubbands(ws)))
     best, tbest = ws.batch, _time_transforms(ws, x, c)
     # Candidates that give the same chunks are timed once.
-    for k in unique!([maximum(length, _even_chunks(_nsubbands(ws), k)) for k in candidates])
+    for k in unique!([maximum(length, even_chunks(_nsubbands(ws), k)) for k in candidates])
         k == _chunk_size(ws.batch) && continue
         bt = k < 2 ? nothing : _make_batch(ws, k)
         t = _time_transforms(_with_batch(ws, bt), x, c)

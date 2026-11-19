@@ -51,6 +51,19 @@ end
     @test_throws ArgumentError shearlet_layout(sys, (8, 8, 8, 8))
 end
 
+@testitem "ShearletIndex: show round-trips" tags = [:bandlimited, :compact] begin
+    for (sys, dims) in ((BandlimitedShearlets(scales = 2), (32, 32)), (BandlimitedShearlets(scales = 2), (16, 16, 16)), (CompactShearlets(scales = 2), (32, 32)))
+        for i in shearlet_layout(sys, dims)
+            s = repr(i)
+            @test Core.eval(@__MODULE__, Meta.parse(s)) === i
+            @test sprint(show, MIME("text/plain"), i) == s
+        end
+    end
+    @test repr(shearlet_layout(BandlimitedShearlets(), (8, 8))[1]) == "ShearletIndex(scale = 0, cone = 0, shear = (0,))"
+    @test ShearletIndex(scale = 2, cone = 1, shear = (-1, 3)) === ShearletIndex{2}(2, 1, (-1, 3))
+    @test ShearletIndex(scale = 1, cone = 2, shear = [0]) === ShearletIndex{1}(1, 2, (0,))
+end
+
 @testitem "Band-limited shearlets: a plane wave lands in its shear" tags = [:bandlimited] begin
     # Perfect reconstruction says nothing about geometry; check where energy goes.
     wave(dims, f) = [cospi(2 * (f[1] * (i - 1) / dims[1] + f[2] * (j - 1) / dims[2])) for i in 1:dims[1], j in 1:dims[2]]

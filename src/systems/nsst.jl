@@ -76,9 +76,8 @@ function NSSTShearlets(; directions::AbstractVector{<:Integer} = [3, 3, 4, 4], f
 end
 
 Base.:(==)(a::NSSTShearlets, b::NSSTShearlets) =
-    a.directions == b.directions && a.filter_size == b.filter_size && a.pyramid.h == b.pyramid.h && a.pyramid.g == b.pyramid.g
-Base.hash(a::NSSTShearlets, h::UInt) =
-    hash(a.directions, hash(a.filter_size, hash(a.pyramid.h, hash(a.pyramid.g, hash(NSSTShearlets, h)))))
+    a.directions == b.directions && a.filter_size == b.filter_size && a.pyramid == b.pyramid
+Base.hash(a::NSSTShearlets, h::UInt) = hash(a.directions, hash(a.filter_size, hash(a.pyramid, hash(NSSTShearlets, h))))
 
 # Shears per side of each cone at a scale with 2^d directions.
 _nsst_shears(d::Int) = 2^(d - 2)

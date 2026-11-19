@@ -68,6 +68,10 @@ end
     @test NSSTShearlets(directions = [2, 3, 4, 4]).filter_size == [32, 32, 16, 16]
     @test NSSTShearlets() == NSSTShearlets()
     @test hash(NSSTShearlets()) == hash(NSSTShearlets())
+    other = FilterPair([0.25, 0.5, 0.25], [-0.125, -0.25, 0.75, -0.25, -0.125])
+    @test NSSTShearlets(pyramid = other) == NSSTShearlets(pyramid = other)
+    @test hash(NSSTShearlets(pyramid = other)) == hash(NSSTShearlets(pyramid = other))
+    @test NSSTShearlets(pyramid = other) != NSSTShearlets()
     @test hash(CompactShearlets(scales = 1)) == hash(CompactShearlets(scales = 1))
     @test_throws ArgumentError shearlet_layout(NSSTShearlets(), (8, 8, 8))
     @test_throws ArgumentError shearlet_forward(randn(8, 8, 8), NSSTShearlets())

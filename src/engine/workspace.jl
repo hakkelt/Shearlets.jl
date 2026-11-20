@@ -78,10 +78,16 @@ FFT per chunk, with a chunk size that by default follows from the grid size.
 `tune = true` measures instead (`MultiscaleFilterBanks.tune_mask_bank`): it
 times one subband at a time and chunks of powers of two subbands, each with the
 synthesis chunked or not, on a forward and an inverse transform, and keeps the
-default unless another is 5% faster.  Tuning takes a fraction of a second once
-compiled and holds a coefficient array and the stacks of one more chunk size on
-the device meanwhile; the transform itself is unchanged.  On the host `tune`
-does nothing: a host workspace threads over subbands instead.
+default unless another is 5% faster.  Tuning holds a coefficient array and the
+stacks of one more chunk size on the device meanwhile; the transform itself is
+unchanged.  On an A100 (Float32 and ComplexF32) it pays off only for the
+`NSSTShearlets`: at 256² and 512² it adds 40–280 ms to the construction and
+makes the analysis 10–45% and the synthesis 1.2–3.4× faster, which repays
+the construction after about 230–660 analysis–synthesis pairs.  For the
+`BandlimitedShearlets` and `CompactShearlets` (2-D and 3-D) the default
+chunking already measures best, and tuning only adds 0.1–4.4 s to the
+construction.  On the host `tune` does nothing: a host workspace threads
+over subbands instead.
 
 ```julia
 ws = make_workspace(system, CuArray{Float32}(undef, 256, 256); tune = true)

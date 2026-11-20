@@ -16,9 +16,10 @@
     random_input(rng, T, dims) =
         T <: Real ? randn(rng, Float32, dims...) : complex.(randn(rng, Float32, dims...), randn(rng, Float32, dims...))
 
-    # `ws` with its engine rebuilt to run in chunks of at most `k` subbands, with
-    # the planners of a device workspace, or FFTW's on the host.
-    function rechunk(ws, k)
+    # `ws` with its engine rebuilt to run its analysis (and, with `synthesis`,
+    # its synthesis) in chunks of at most `k` subbands, with the planners of a
+    # device workspace, or FFTW's on the host.
+    function rechunk(ws, k; synthesis = true)
         e = ws.engine
         N = length(ws.dims)
         planner, forward_planner, output = something(
@@ -32,7 +33,8 @@
         chunked = MaskBankEngine(
             e.banks, e.items, similar(e.X), e.pfwd, e.pinv; groups = e.pyramid_syn, post = e.post,
             pbwd = e.pbwd, scale = e.scale, split_complex = eltype(ws) <: Complex,
-            planner, forward_planner, output, chunk_samples = k * length(e.X), tasks = 1
+            planner, forward_planner = synthesis ? forward_planner : nothing, output,
+            chunk_samples = k * length(e.X), tasks = 1
         )
         return Shearlets._with_engine(ws, chunked)
     end

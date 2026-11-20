@@ -117,9 +117,7 @@ FFT. The pieces:
   subband. Band-limited masks are `SparseMask`s, 3-D compact shearlets keep
   their factored `_ProductMask` with a host loop (Base's broadcast over the
   singleton axes is 40–70 % slower on the host), and the NSST's groups are the
-  engine's `groups` with identity bank synthesis masks. On the host it matched
-  Shearlets' former engine within noise (forward and inverse, all systems,
-  256² and 64³, real and complex).
+  engine's `groups` with identity bank synthesis masks.
 - **NSST shearing filters** are Meyer windows on the pseudo-polar slope,
   sampled on an `L × L` grid and applied as periodic convolutions (ELL 2008
   §3.3); `filter_size = 0` is the frequency-domain variant (§3.1).

@@ -88,6 +88,11 @@ end
             ws = Adapt.adapt(typeof(to_gpu(backend, x)).name.wrapper, cpu)
             c = to_gpu(backend, ref)
             @test maximum(abs, Array(synthesize(sys, c; workspace = ws)) .- x) < 1.0f-4 * maximum(abs, x)
+            # The synthesis one subband at a time sums each level's stored
+            # slices on the device in one pass.
+            wl = ChunkCases.rechunk(ws, 8; synthesis = false)
+            @test wl.engine.batch === nothing || wl.engine.batch.smasks === nothing
+            @test maximum(abs, Array(synthesize(sys, c; workspace = wl)) .- x) < 1.0f-4 * maximum(abs, x)
         end
     end
 end

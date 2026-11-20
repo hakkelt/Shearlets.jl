@@ -145,9 +145,9 @@ end
 Streaming shearlet transform: calls `f(i, band)` for every subband `i` in
 `subband_layout` order, reusing one buffer between calls, so the coefficient
 set is never held at once.  `band` is valid only until `f` returns — copy or
-reduce it there.  The subbands are computed one at a time and `f` is called
-from the calling task, whatever `threaded` says (it is accepted for the
-common interface).
+reduce it there.  The subbands are computed one at a time: `f` is called once
+per subband, in that order, from the calling task.  `threaded` has no effect
+(it is accepted for the common interface).
 """
 function MultiscaleTransformsBase.analyze(
         f, sys::ShearletSystem, x::AbstractArray{<:Number};
@@ -200,7 +200,10 @@ end
 
 Streaming inverse into `x`: `f(i)` must return subband `i` (in
 `subband_layout` order) as an array of size `size(x)`.  The subbands are
-consumed one at a time, from the calling task, whatever `threaded` says.
+consumed one at a time: `f` is called once per subband, in `subband_layout`
+order, from the calling task, and each result is read before the next call, so
+`f` may reuse one buffer.  `threaded` has no effect (it is accepted for the
+common interface).
 """
 function MultiscaleTransformsBase.synthesize!(
         f, x::AbstractArray{<:Number}, sys::ShearletSystem;

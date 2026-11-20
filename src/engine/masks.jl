@@ -33,6 +33,7 @@ end
 MultiscaleFilterBanks.mask_apply!(Z, m::_ProductMask, X, s) = (Z .= (s .* m.f1 .* m.f2) .* X; Z)
 MultiscaleFilterBanks.mask_apply!(Z, m::_ProductMask, X) = mask_apply!(Z, m, X, true)
 MultiscaleFilterBanks.mask_accumulate!(A, m::_ProductMask, F) = (A .+= (m.f1 .* m.f2) .* F; A)
+MultiscaleFilterBanks.mask_accumulate!(A, m::_ProductMask, F, s) = (A .+= (s .* m.f1 .* m.f2) .* F; A)
 
 # On the host the products of `_ProductMask`s are loops: Base's broadcast over
 # the singleton axes of the factors does not vectorise, nor does a complex
@@ -45,10 +46,13 @@ function MultiscaleFilterBanks.mask_apply!(Z::Array{Complex{Tf}, 3}, m::_HostPro
     return Z
 end
 
-function MultiscaleFilterBanks.mask_accumulate!(A::Array{Complex{Tf}, 3}, m::_HostProduct{Tf}, F::Array{Complex{Tf}, 3}) where {Tf}
-    _product_loop!(+, reinterpret(reshape, Tf, A), m, reinterpret(reshape, Tf, F), one(Tf))
+function MultiscaleFilterBanks.mask_accumulate!(A::Array{Complex{Tf}, 3}, m::_HostProduct{Tf}, F::Array{Complex{Tf}, 3}, s) where {Tf}
+    _product_loop!(+, reinterpret(reshape, Tf, A), m, reinterpret(reshape, Tf, F), s)
     return A
 end
+
+MultiscaleFilterBanks.mask_accumulate!(A::Array{Complex{Tf}, 3}, m::_HostProduct{Tf}, F::Array{Complex{Tf}, 3}) where {Tf} =
+    MultiscaleFilterBanks.mask_accumulate!(A, m, F, one(Tf))
 
 # Zr[:, I] = op(Zr[:, I], s · f1[I] · f2[I] · Yr[:, I]) over the 3-D grid I, with
 # Zr and Yr complex arrays read as reals, the factors broadcast.

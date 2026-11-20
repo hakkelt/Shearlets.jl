@@ -46,3 +46,48 @@ end
     @test y ≈ x
     @test isempty(Test.detect_ambiguities(Shearlets, MultiscaleTransformsBase))
 end
+
+@testitem "Systems: show prints a keyword call" tags = [:interface] begin
+    using Random
+    # The two-argument form parses back to an equal system.
+    roundtrip(sys) = Core.eval(@__MODULE__, Meta.parse(repr(sys))) == sys
+    systems = (
+        BandlimitedShearlets(),
+        BandlimitedShearlets(scales = 3, smooth = true, alpha = 0.5),
+        NSSTShearlets(),
+        NSSTShearlets(directions = [2, 3], filter_size = 0),
+        NSSTShearlets(directions = [2], pyramid = FilterPair([0.25, 0.5, 0.25], [-0.125, 0.25, 0.75, 0.25, -0.125])),
+        CompactShearlets(),
+        CompactShearlets(scales = 2, shear_levels = [0, 2], qmf = [0.25, 0.5, 0.25]),
+    )
+    for sys in systems
+        @test roundtrip(sys)
+        @test sprint(show, MIME("text/plain"), sys) == repr(sys)
+    end
+    @test repr(BandlimitedShearlets()) == "BandlimitedShearlets(scales = 0, smooth = false, alpha = 1.0)"
+    @test repr(NSSTShearlets()) == "NSSTShearlets(directions = [3, 3, 4, 4], filter_size = [32, 32, 16, 16])"
+    @test repr(CompactShearlets()) == "CompactShearlets(scales = 4, shear_levels = [1, 1, 2, 2])"
+
+    # A large custom filter is summarized; the text/plain display adds its taps.
+    fan = CompactShearlets().fan
+    fan2 = (fan .+ reverse(fan)) ./ 2 .+ 1.0e-3
+    sys = CompactShearlets(scales = 2, fan = fan2)
+    @test repr(sys) == "CompactShearlets(scales = 2, shear_levels = [1, 1], fan = <9×9 Matrix{Float64}>)"
+    full = sprint(show, MIME("text/plain"), sys)
+    @test startswith(full, repr(sys) * "\n  fan = 9×9 Matrix{Float64}:")
+    @test count(==('\n'), full) == 10
+
+    # Workspace mismatch messages name the systems briefly.
+    x = randn(Xoshiro(3), 64, 64)
+    ws = make_workspace(CompactShearlets(scales = 2), x)
+    err = try
+        analyze(CompactShearlets(scales = 3), x; workspace = ws)
+        nothing
+    catch e
+        e
+    end
+    @test err isa ArgumentError
+    msg = sprint(showerror, err)
+    @test occursin("CompactShearlets(scales = 2, shear_levels = [1, 1])", msg)
+    @test length(msg) < 200
+end

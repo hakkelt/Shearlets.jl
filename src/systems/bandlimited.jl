@@ -45,6 +45,7 @@ the three pyramids around the axes).
   one shear per side at every scale (wavelet-like), `α → 0` approaches ridgelets.
 
 Every subband has the size of the input; real input gives real subbands.
+`show` prints the keyword call that rebuilds the system.
 
 # References
 1. S. Häuser and G. Steidl, "Fast Finite Shearlet Transform: a tutorial",
@@ -72,6 +73,11 @@ struct BandlimitedShearlets <: ShearletSystem
 end
 
 BandlimitedShearlets(; scales::Integer = 0, smooth::Bool = false, alpha::Real = 1) = BandlimitedShearlets(scales, smooth, alpha)
+
+function Base.show(io::IO, sys::BandlimitedShearlets)
+    print(io, "BandlimitedShearlets(scales = ", sys.scales, ", smooth = ", sys.smooth, ", alpha = ", sys.alpha, ")")
+    return nothing
+end
 
 function _nscales(sys::BandlimitedShearlets, dims::Tuple)
     sys.scales > 0 && return sys.scales

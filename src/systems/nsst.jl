@@ -44,6 +44,11 @@ the coarsest).  Every subband has the size of the input.
 The frame is not tight: `synthesize` sums the directional subbands of each
 level and inverts the pyramid.
 
+`show` prints the keyword call that rebuilds the system, without `pyramid`
+when it is `CDF97`.  A pyramid filter of more than 32 taps prints as its size
+and element type, which does not parse back; the `text/plain` display adds its
+taps.
+
 # References
 1. G. Easley, D. Labate, and W.-Q. Lim, "Sparse Directional Image Representations
    Using the Discrete Shearlet Transform", *Applied and Computational Harmonic
@@ -74,6 +79,25 @@ function NSSTShearlets(; directions::AbstractVector{<:Integer} = [3, 3, 4, 4], f
         filter_size isa Integer ? fill(Int(filter_size), J) : collect(Int, filter_size)
     return NSSTShearlets(directions, sizes, pyramid)
 end
+
+function Base.show(io::IO, sys::NSSTShearlets)
+    print(io, "NSSTShearlets(directions = ")
+    show(io, sys.directions)
+    print(io, ", filter_size = ")
+    show(io, sys.filter_size)
+    if sys.pyramid != CDF97
+        print(io, ", pyramid = FilterPair(")
+        _show_taps(io, sys.pyramid.h)
+        print(io, ", ")
+        _show_taps(io, sys.pyramid.g)
+        print(io, ")")
+    end
+    print(io, ")")
+    return nothing
+end
+
+Base.show(io::IO, ::MIME"text/plain", sys::NSSTShearlets) =
+    _show_with_taps(io, sys, sys.pyramid == CDF97 ? () : ("pyramid.h" => sys.pyramid.h, "pyramid.g" => sys.pyramid.g))
 
 Base.:(==)(a::NSSTShearlets, b::NSSTShearlets) =
     a.directions == b.directions && a.filter_size == b.filter_size && a.pyramid == b.pyramid

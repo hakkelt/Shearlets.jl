@@ -79,6 +79,11 @@ tight — the inverse uses the dual filters.
 
 The two cones overlap at the seam lines (`|k| = 2^d` in both), as in ShearLab.
 
+`show` prints the keyword call that rebuilds the system, without `qmf` and
+`fan` when they are the defaults.  A filter of more than 32 taps prints as its
+size and element type (`fan = <9×9 Matrix{Float64}>`), which does not parse
+back; the `text/plain` display adds its taps.
+
 On 3-D data the cones are the three pyramids around the axes and a shearlet has
 a shear `(k₁, k₂)` against each of the other two axes, `3(2^(d+1) + 1)²`
 subbands per scale (ShearLab 3D's Definitions 3.3–3.4).
@@ -114,6 +119,22 @@ CompactShearlets(;
     scales::Integer = 4, shear_levels::AbstractVector{<:Integer} = ceil.(Int, (1:scales) ./ 2),
     qmf::AbstractVector{<:Real} = _SHEARLAB_QMF, fan::AbstractMatrix{<:Real} = _maxflat_fan(),
 ) = CompactShearlets(scales, shear_levels, qmf, fan)
+
+function Base.show(io::IO, sys::CompactShearlets)
+    print(io, "CompactShearlets(scales = ", sys.scales, ", shear_levels = ")
+    show(io, sys.shear_levels)
+    sys.qmf == _SHEARLAB_QMF || (print(io, ", qmf = "); _show_taps(io, sys.qmf))
+    sys.fan == _maxflat_fan() || (print(io, ", fan = "); _show_taps(io, sys.fan))
+    print(io, ")")
+    return nothing
+end
+
+function Base.show(io::IO, ::MIME"text/plain", sys::CompactShearlets)
+    custom = Pair{String, Array{Float64}}[]
+    sys.qmf == _SHEARLAB_QMF || push!(custom, "qmf" => sys.qmf)
+    sys.fan == _maxflat_fan() || push!(custom, "fan" => sys.fan)
+    return _show_with_taps(io, sys, custom)
+end
 
 Base.:(==)(a::CompactShearlets, b::CompactShearlets) =
     a.scales == b.scales && a.shear_levels == b.shear_levels && a.qmf == b.qmf && a.fan == b.fan

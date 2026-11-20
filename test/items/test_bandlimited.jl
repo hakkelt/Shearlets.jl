@@ -171,3 +171,34 @@ end
     @test fwd_ws(c, x, ws) == 0
     @test inv_ws(y, c, ws) == 0
 end
+
+@testitem "Arrays the FFT plans cannot take go through buffers" tags = [:workspace] begin
+    using Random
+    rng = Xoshiro(11)
+    # (31, 33) Float32: the slices of stacked coefficients are not 16-byte
+    # aligned, so the plans take any alignment.
+    for (sys, dims) in ((BandlimitedShearlets(scales = 2), (31, 33)), (NSSTShearlets(directions = [2, 2]), (32, 32))),
+            T in (Float32, ComplexF32)
+        x = T <: Real ? randn(rng, T, dims...) : complex.(randn(rng, Float32, dims...), randn(rng, Float32, dims...))
+        ws = make_workspace(sys, T, dims)
+        ref = analyze(sys, x; workspace = ws)
+        n = size(ref, 3)
+        # A strided view of the input, and of the coefficients.
+        big = zeros(T, 2 .* dims)
+        xv = view(big, 1:2:size(big, 1), 1:2:size(big, 2))
+        xv .= x
+        C = zeros(T, 2 * dims[1], dims[2], n)
+        cv = view(C, 1:2:size(C, 1), :, :)
+        @test analyze!(cv, sys, xv; workspace = ws) == ref
+        # The staged synthesis runs serially, so its sums are added in another order.
+        y = synthesize(sys, ref; workspace = ws)
+        @test synthesize!(view(big, 2:2:size(big, 1), 1:2:size(big, 2)), sys, cv; workspace = ws) ≈ y
+        # Other element types.
+        c64 = analyze!(zeros(T <: Real ? Float64 : ComplexF64, dims..., n), sys, x; workspace = ws)
+        @test c64 == ref
+        @test synthesize!(similar(x), sys, c64; workspace = ws) ≈ y
+        # Streaming with a strided band from `f`.
+        z = synthesize!(i -> view(C, 1:2:size(C, 1), :, i), similar(x), sys; workspace = ws)
+        @test z ≈ y
+    end
+end

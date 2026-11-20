@@ -108,25 +108,35 @@ function MultiscaleTransformsBase.analyze!(
     return coeffs
 end
 
+# The subband of an engine output index; the engine has no lowpass of its own
+# (the lowpass is subband 1).
+_band_index(ix::Tuple{Int}) = ix[1]
+_band_index(::Nothing) = throw(ArgumentError("a shearlet engine has no separate lowpass"))
+
 # Subband `i` (or the subbands in a range) of a stacked coefficient array.
 _band(coeffs::AbstractArray, i::Union{Int, UnitRange{Int}}) = selectdim(coeffs, ndims(coeffs), i)
 
-function _inverse_from!(x::AbstractArray, coeffs::AbstractArray, ws::ShearletWorkspace, threaded::Bool)
-    _chunked_synthesis(ws) && return _batched_inverse_from!(x, coeffs, ws)
-    return _engine_inverse!(_Bands(coeffs), x, ws, threaded)
-end
-
-function _forward_into!(coeffs::AbstractArray, x::AbstractArray, ws::ShearletWorkspace{Td, Tf, N}, threaded::Bool) where {Td, Tf, N}
-    ws.batch === nothing || return _batched_forward_into!(coeffs, x, ws)
-    # Every slice is aligned if the first two are: they are equally spaced.
-    if _nchannels(ws) == 1 && all(i -> _plannable(_band(coeffs, i), Tf, N), 1:min(2, size(coeffs, N + 1)))
-        # Real data into dense slices: the inverse FFT writes the subbands.
-        _engine_forward!((i, t, c) -> _band(coeffs, i), (i, t) -> nothing, x, ws, threaded)
+# Subbands the plans cannot take are written (read) one at a time through
+# `ws.bbuf`, and an output they cannot take is staged in `ws.xbuf`.
+function _forward_into!(coeffs::AbstractArray, x::AbstractArray, ws::ShearletWorkspace, threaded::Bool)
+    xin = _engine_input(ws, x)
+    if _direct_bands(ws, coeffs)
+        mask_bank_forward!(_Stack(coeffs), xin, ws.engine, threaded)
     else
-        emit(i, t) = (_combine!(_band(coeffs, i), ws.rbufs[t]); nothing)
-        _engine_forward!((i, t, c) -> ws.rbufs[t][c], emit, x, ws, threaded)
+        mask_bank_stream_forward!((ix, band) -> (copyto!(_band(coeffs, _band_index(ix)), band); nothing), ws.bbuf, xin, ws.engine)
     end
     return coeffs
+end
+
+function _inverse_from!(x::AbstractArray, coeffs::AbstractArray, ws::ShearletWorkspace, threaded::Bool)
+    out = _direct(ws, x) ? x : ws.xbuf
+    if _direct_bands(ws, coeffs)
+        mask_bank_inverse!(out, _Stack(coeffs), ws.engine, threaded)
+    else
+        mask_bank_stream_inverse!(ix -> copyto!(ws.bbuf, _band(coeffs, _band_index(ix))), out, ws.engine)
+    end
+    out === x || copyto!(x, out)
+    return x
 end
 
 """
@@ -144,17 +154,8 @@ function MultiscaleTransformsBase.analyze(
         workspace::Union{ShearletWorkspace, Nothing} = nothing, threaded::Union{Bool, Nothing} = nothing
     )
     _check_host(workspace, x)
-    Td = data_eltype(x)
-    ws = _workspace(workspace, sys, size(x), Td, false)
-    out = Td <: Real ? nothing : similar(x, Td)
-    give(i, bands) = f(i, out === nothing ? bands[1] : _combine!(out, bands))
-    if ws.batch === nothing
-        _engine_forward!((i, t, c) -> ws.rbufs[t][c], (i, t) -> (give(i, ws.rbufs[t]); nothing), x, ws, false)
-    else
-        target(r, c) = leading_slices(ws.batch.R[c], length(r))
-        emit(r) = foreach((j, i) -> give(i, _columns(ws.batch, j)), eachindex(r), r)
-        _batched_forward!(target, emit, x, ws)
-    end
+    ws = _workspace(workspace, sys, size(x), data_eltype(x), false)
+    mask_bank_stream_forward!((ix, band) -> (f(_band_index(ix), band); nothing), ws.bbuf, _engine_input(ws, x), ws.engine)
     return nothing
 end
 
@@ -207,17 +208,13 @@ function MultiscaleTransformsBase.synthesize!(
     )
     _check_host(workspace, x)
     ws = _workspace(workspace, sys, size(x), data_eltype(x), false)
-    _chunked_synthesis(ws) || return _engine_inverse!(f, x, ws, false)
-    function stage(r)
-        for (j, i) in enumerate(r)
-            band = f(i)
-            for (c, Rc) in enumerate(_columns(ws.batch, j))
-                @.. Rc = _channel(band, c)
-            end
-        end
-        return _columns(ws.batch, 1:length(r))
+    out = _direct(ws, x) ? x : ws.xbuf
+    mask_bank_stream_inverse!(out, ws.engine) do ix
+        band = f(_band_index(ix))
+        _direct(ws, band) ? band : copyto!(ws.bbuf, band)
     end
-    return _batched_inverse!(stage, x, ws)
+    out === x || copyto!(x, out)
+    return x
 end
 
 """
@@ -237,7 +234,7 @@ function shearlet_spectra(sys::ShearletSystem, dims::Tuple; T::Type{<:AbstractFl
     ms = _system_masks(sys, dims, T)
     rd = _rfft_dims(dims)
     out = zeros(T, dims..., length(ms.ana))
-    for (g, grp) in enumerate(ms.groups), i in grp
+    for (g, grp) in enumerate(_groups(ms)), i in grp
         half = synthesis ? _dense_mask(ms.syn[g], rd) : _dense_mask(ms.ana[i], rd)
         synthesis && ms.post !== nothing && (half .*= ms.post)
         dst = selectdim(out, N + 1, i)

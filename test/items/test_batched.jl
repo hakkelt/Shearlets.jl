@@ -1,9 +1,10 @@
-# The chunked path (one batched FFT per chunk of subbands) that device workspaces
-# take, exercised on the host: its code is generic over the array type.
+# The chunked paths (one batched FFT per chunk of subbands) that device
+# workspaces take, exercised on the host: their code is generic over the array type.
 
 @testmodule ChunkCases begin
-    using Shearlets, Random
-    export cases, random_input
+    using Shearlets, FFTW, Random
+    using MultiscaleFilterBanks: MaskBankEngine
+    export cases, random_input, rechunk
     # One system per mask kind and synthesis shape.
     const cases = [
         (BandlimitedShearlets(scales = 2), (64, 48)),     # sparse masks, layered synthesis
@@ -14,28 +15,48 @@
     ]
     random_input(rng, T, dims) =
         T <: Real ? randn(rng, Float32, dims...) : complex.(randn(rng, Float32, dims...), randn(rng, Float32, dims...))
+
+    # `ws` with its engine rebuilt to run in chunks of at most `k` subbands, with
+    # the planners of a device workspace, or FFTW's on the host.
+    function rechunk(ws, k)
+        e = ws.engine
+        N = length(ws.dims)
+        planner, forward_planner, output = something(
+            e.tuning,
+            (
+                (B, R) -> plan_brfft(B, ws.dims[1], 1:N; flags = FFTW.UNALIGNED),
+                (R, B) -> plan_rfft(R, 1:N; flags = FFTW.UNALIGNED),
+                zeros(eltype(ws), ws.dims),
+            )
+        )
+        chunked = MaskBankEngine(
+            e.banks, e.items, similar(e.X), e.pfwd, e.pinv; groups = e.pyramid_syn, post = e.post,
+            pbwd = e.pbwd, scale = e.scale, split_complex = eltype(ws) <: Complex,
+            planner, forward_planner, output, chunk_samples = k * length(e.X), tasks = 1
+        )
+        return Shearlets._with_engine(ws, chunked)
+    end
 end
 
 @testitem "Chunked path matches the per-subband engine" tags = [:workspace] setup = [ChunkCases] begin
     using Random
-    const S = Shearlets
     rng = Xoshiro(7)
     for (sys, dims) in ChunkCases.cases, T in (Float32, ComplexF32)
         x = ChunkCases.random_input(rng, T, dims)
         ws = make_workspace(sys, T, dims)
         ref = analyze(sys, x; workspace = ws)
         n = size(ref, ndims(ref))
-        # One chunk of all, uneven chunks, and chunks of one.
-        for k in (n, 5, 1)
-            wb = S._with_batch(ws, S._make_batch(ws, k))
-            @test maximum(length, wb.batch.chunks) <= k
+        # One chunk of all, uneven chunks, and chunks of two.
+        for k in (n, 5, 2)
+            wb = ChunkCases.rechunk(ws, k)
+            @test wb.engine.batch !== nothing
+            @test maximum(c -> length(c.items), wb.engine.batch.chunks) <= k
             c = analyze(sys, x; workspace = wb)
             @test maximum(abs, c .- ref) <= 1.0f-5 * maximum(abs, ref)
             @test maximum(abs, synthesize(sys, c; workspace = wb) .- x) <= 1.0f-5 * maximum(abs, x)
-            @test (wb.batch.syn === nothing) == (sys isa NSSTShearlets)
         end
-        # The streaming forms take the chunked path too.
-        wb = S._with_batch(ws, S._make_batch(ws, 5))
+        # The streaming forms run one subband at a time on a chunked engine too.
+        wb = ChunkCases.rechunk(ws, 5)
         cs = similar(ref)
         analyze((i, band) -> copyto!(selectdim(cs, ndims(cs), i), band), sys, x; workspace = wb)
         @test maximum(abs, cs .- ref) <= 1.0f-5 * maximum(abs, ref)
@@ -44,25 +65,20 @@ end
     end
 end
 
-@testitem "Chunked path: device-style workspace and tuning" tags = [:workspace] begin
+@testitem "Chunked path: adapted workspace and tuning" tags = [:workspace] setup = [ChunkCases] begin
     using Adapt, Random
     const S = Shearlets
     sys, dims = CompactShearlets(scales = 2), (64, 64)
     x = randn(Xoshiro(3), Float32, dims...)
     ws = make_workspace(sys, Float32, dims)
     ref = analyze(sys, x; workspace = ws)
-    # The extension stacks the dense masks into one matrix, and the chunks are
-    # views of it; it chunks device workspaces only.
+    # Adapted to host arrays, a workspace threads over subbands, unchunked.
     hw = Adapt.adapt(Array, ws)
-    @test hw.batch === nothing && hw.masks.syn === hw.masks.ana
-    @test hw.masks.ana[1].val isa SubArray
-    dw = S._with_batch(hw, S._make_batch(hw, S._default_chunk(hw)))
-    @test parent(dw.batch.ana[1]) === parent(dw.masks.ana[1].val)
-    @test dw.batch.syn === dw.batch.ana
-    @test analyze(sys, x; workspace = dw) ≈ ref
+    @test hw.engine.batch === nothing && hw.engine.tuning === nothing
+    @test analyze(sys, x; workspace = hw) ≈ ref
     # Tuning keeps a chunked path or drops it, and the transform is the same.
-    tw = S._tune_batch(dw; candidates = [1, 2, 8])
-    sizes = [maximum(length, S.even_chunks(S._nsubbands(dw), k)) for k in (1, 2, 8)]
-    @test S._chunk_size(tw.batch) in (sizes..., S._chunk_size(dw.batch))
+    dw = ChunkCases.rechunk(ws, 8)
+    tw = S._tune(dw)
     @test analyze(sys, x; workspace = tw) ≈ ref
+    @test synthesize(sys, analyze(sys, x; workspace = tw); workspace = tw) ≈ x
 end

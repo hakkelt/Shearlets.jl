@@ -24,9 +24,11 @@ Unlike the contourlet / surfacelet split, one package covers both dimensions:
 the cone-adapted construction is the same in 2-D and 3-D (two cones, three
 pyramids), with no lattice that only exists in the plane.
 
-The surface shared with the core: `FilterPair`, `CDF97`, and the internals `data_eltype`, `n_tasks`, `foreach_chunk`, `chunked_sum!`,
-`loop_threaded`, `with_fftw_threads`, `upsample_filter`, `nsp_responses` (the NSST pyramid) and the
-chunking helpers `even_chunks`, `leading_slices` and `DEFAULT_CHUNK_SAMPLES`, imported in `src/Shearlets.jl`.
+The surface shared with the core: `FilterPair`, `CDF97`, the mask-bank engine
+(`MaskBankEngine`, `MaskBank`, `MaskItem`, `SparseMask`, `IdentityMask`, the
+forward/inverse and streaming entry points, `tune_mask_bank`), and the internals
+`data_eltype`, `loop_threaded`, `with_fftw_threads`, `nsp_responses` (the NSST
+pyramid) and `DEFAULT_CHUNK_SAMPLES`, imported in `src/Shearlets.jl`.
 
 **First checkout**: `MultiscaleFilterBanks.jl` and `MultiscaleTransformsBase.jl` are
 unregistered and expected as sibling directories, wired in through `[sources]`. On Julia 1.10, which does not
@@ -48,24 +50,24 @@ FFT. The pieces:
 - `src/systems/*.jl` — one file per system. A system implements
   `subband_layout(sys, dims)` and `_shearlet_masks(sys, dims, Tf) -> _MaskSet`;
   nothing else is system-specific.
-- `src/engine/masks.jl` — the mask kinds: `_SparseMask` (support indices,
-  for band-limited masks), `_DenseMask` (FIR filters) and `_ProductMask`
-  (two broadcastable planes, for 3-D FIR filters whose full masks would not fit
-  in memory), and `_MaskSet`: an analysis mask per subband, a synthesis mask per
-  group of consecutive subbands, and an optional post-factor of the synthesis
-  sum. A Parseval system has singleton groups with the analysis masks; a dual
-  frame adds the post-factor `1 / Σ Aᵢ²` instead of a second mask per subband;
-  the NSST groups each level under its pyramid mask, so the inverse sums a
-  level's subbands in space and pays one FFT per level.
-- `src/engine/workspace.jl` — buffers, plans, and the threaded forward/inverse
-  loops over subbands.
-- `src/engine/batched.jl` — the chunked path device workspaces take: a chunk of
-  subbands per batched FFT, fused chunk masks, the default chunk size and
-  its tuner (`make_workspace(sys, x; tune = true)`).  Its code is generic, so host tests exercise it.
+- `src/engine/masks.jl` — the masks: MultiscaleFilterBanks' `SparseMask`
+  (band-limited masks), dense arrays on the grid (FIR filters) and Shearlets'
+  own `_ProductMask` (two broadcastable planes, for 3-D FIR filters whose full
+  masks would not fit in memory; a host loop, broadcasts on devices), and
+  `_MaskSet`: an analysis mask per subband, a synthesis mask per group of
+  consecutive subbands (`groups = nothing`: one per subband, the analysis
+  masks), and an optional post-factor of the synthesis sum. A dual frame adds
+  the post-factor `1 / Σ Aᵢ²` instead of a second mask per subband; the NSST
+  groups each level under its pyramid mask, so the inverse sums a level's
+  subbands in space (the engine's `IdentityMask`) and pays one FFT per level.
+- `src/engine/workspace.jl` — the workspace: a `MaskBankEngine` of the masks
+  (`_engine`), the buffers that stage arrays the FFT plans cannot take, and
+  the device tuner (`make_workspace(sys, x; tune = true)`).
 - `src/transforms/shearlet.jl` — the interface methods (`analyze`, `synthesize`,
   the streaming forms, coefficient accessors) and `shearlet_spectra`.
-- `ext/ShearletsAdaptExt.jl` — the GPU path: `Adapt.adapt_structure` and the
-  device routing of `make_workspace(sys, x)`. Adapt is a dependency of
+- `ext/ShearletsAdaptExt.jl` — the GPU path: `Adapt.adapt_structure` (the
+  masks moved, the engine rebuilt with batched plans: chunks of subbands per
+  FFT) and the device routing of `make_workspace(sys, x)`. Adapt is a dependency of
   MultiscaleTransformsBase, so the extension always loads.
 
 ## Invariants
@@ -84,10 +86,13 @@ FFT. The pieces:
   transform is real-linear bit for bit: `T(a + ib) == T(a) + iT(b)`.
 - **Workspace paths allocate nothing**: `analyze!` / `synthesize!`
   with a workspace (or the workspace-only forms) and `threaded = false` are tested with `@allocated == 0`.
-  Linear indexing into a matrix view reshapes its parent and allocates — use the
-  `bufs_v` vector aliases.
-- **No scalar indexing in the mask kernels** (`_mask_apply!`, `_mask_accumulate!`):
-  they are broadcasts, so the device path needs no kernels.
+- **The engine's FFT plans read and write caller arrays directly** (real data):
+  the input, the output and the coefficient slices. `_plannable` decides; other
+  arrays (strided views, other element types) are staged through the
+  workspace's `xbuf` / `bbuf`, one subband at a time. Sizes whose Float32
+  (Float64) slices are not 16-byte aligned get `FFTW.UNALIGNED` plans.
+- **No scalar indexing in the device mask products** (`_ProductMask` outside
+  the host loop): they are broadcasts, so the device path needs no kernels.
 - **Never call `FFTW.set_num_threads`**: plan inside `with_fftw_threads`.
 - **Formatting**: `runic --inplace src ext test`, then
   `JULIA_LOAD_PATH="@relint:@stdlib" julia --startup-file=no scripts/relint.jl src/`.
@@ -107,14 +112,14 @@ FFT. The pieces:
   The default QMF is MATLAB's `maxflat` design (taps from MATLAB itself); the
   fan is da Cunha et al.'s maximally flat order-4 fan (Table II), which is not
   the toolbox's `dmaxflat4`.
-- **Its own single-stage engine, not MultiscaleFilterBanks' `MaskBankEngine`.**
-  The shared engine is two-stage (pyramid mask × bank channel, dense complex
-  masks). Band-limited masks are compactly supported in frequency and stored
-  sparsely — dense complex masks would take ~25× the memory — and 3-D compact
-  shearlets need factored masks; neither fits that shape. The one grouping that
-  pays here, the NSST's shared synthesis mask per level, is the `_MaskSet` groups.
-- **Dense products use `@..`** (FastBroadcast), as in the shared engine; it does
-  not take indexed views, so the sparse gather/scatter stays Base broadcast.
+- **MultiscaleFilterBanks' `MaskBankEngine` runs the transforms**, as a flat
+  engine (no pyramid analysis masks), complex data as two real channels per
+  subband. Band-limited masks are `SparseMask`s, 3-D compact shearlets keep
+  their factored `_ProductMask` with a host loop (Base's broadcast over the
+  singleton axes is 40–70 % slower on the host), and the NSST's groups are the
+  engine's `groups` with identity bank synthesis masks. On the host it matched
+  Shearlets' former engine within noise (forward and inverse, all systems,
+  256² and 64³, real and complex).
 - **NSST shearing filters** are Meyer windows on the pseudo-polar slope,
   sampled on an `L × L` grid and applied as periodic convolutions (ELL 2008
   §3.3); `filter_size = 0` is the frequency-domain variant (§3.1).

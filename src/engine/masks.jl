@@ -10,38 +10,78 @@
 # subband per group and S_g = A_g; a dual frame has S_g = A_g and P = 1 / Σ Aᵢ²,
 # so neither stores a second mask per subband; the NSST's directional subbands
 # of a level share the level's pyramid mask, so a level costs one FFT.
+#
+# The masks are MultiscaleFilterBanks mask kinds, run by its `MaskBankEngine`
+# (`engine/workspace.jl`): a `SparseMask` (band-limited masks: at 512² with
+# four scales the 61 masks hold about as many samples as four dense ones), a
+# dense array on the grid (FIR filters), or a `_ProductMask` of two factors
+# that broadcast over the grid (3-D FIR filters, whose full masks would not fit
+# in memory).
 
 """
-    _FrequencyMask{Tf}
+    _ProductMask{Tf}(f1, f2)
 
-A real mask on the `rfft` grid:
-
-- `_SparseMask`: values `val` on the linear indices `idx` of its support (a mask
-  compactly supported in frequency: at 512² with four scales the 61 band-limited
-  masks hold about as many samples as four dense ones);
-- `_DenseMask`: values over every linear index of the grid (FIR filters);
-- `_ProductMask`: the product of two factors that broadcast over the grid (each
-  has singleton axes), for 3-D FIR filters whose full masks would not fit in
-  memory.
+The mask `f1 .* f2` of two factors that broadcast over the `rfft` grid (each has
+singleton axes), never formed at full size.  A mask kind of the engine: on host
+3-D arrays its products are the loops below, elsewhere broadcasts.
 """
-abstract type _FrequencyMask{Tf} end
-
-struct _SparseMask{Tf, I <: AbstractVector{Int32}, V <: AbstractVector{Tf}} <: _FrequencyMask{Tf}
-    idx::I
-    val::V
-end
-
-_SparseMask(idx::Vector{Int32}, val::Vector{Tf}) where {Tf} = _SparseMask{Tf, Vector{Int32}, Vector{Tf}}(idx, val)
-
-struct _DenseMask{Tf, V <: AbstractVector{Tf}} <: _FrequencyMask{Tf}
-    val::V
-end
-
-_DenseMask(val::Vector{Tf}) where {Tf} = _DenseMask{Tf, Vector{Tf}}(val)
-
-struct _ProductMask{Tf, A <: AbstractArray{Tf}, B <: AbstractArray{Tf}} <: _FrequencyMask{Tf}
+struct _ProductMask{Tf, A <: AbstractArray{Tf}, B <: AbstractArray{Tf}}
     f1::A
     f2::B
+end
+
+MultiscaleFilterBanks.mask_apply!(Z, m::_ProductMask, X, s) = (Z .= (s .* m.f1 .* m.f2) .* X; Z)
+MultiscaleFilterBanks.mask_apply!(Z, m::_ProductMask, X) = mask_apply!(Z, m, X, true)
+MultiscaleFilterBanks.mask_accumulate!(A, m::_ProductMask, F) = (A .+= (m.f1 .* m.f2) .* F; A)
+
+# On the host the products of `_ProductMask`s are loops: Base's broadcast over
+# the singleton axes of the factors does not vectorise, nor does a complex
+# product, so the complex arrays are read as pairs of reals.  The first axis is
+# innermost, and a factor without it is a scalar along it.
+const _HostProduct{Tf} = _ProductMask{Tf, Array{Tf, 3}, Array{Tf, 3}}
+
+function MultiscaleFilterBanks.mask_apply!(Z::Array{Complex{Tf}, 3}, m::_HostProduct{Tf}, X::Array{Complex{Tf}, 3}, s) where {Tf}
+    _product_loop!((z, v) -> v, reinterpret(reshape, Tf, Z), m, reinterpret(reshape, Tf, X), s)
+    return Z
+end
+
+function MultiscaleFilterBanks.mask_accumulate!(A::Array{Complex{Tf}, 3}, m::_HostProduct{Tf}, F::Array{Complex{Tf}, 3}) where {Tf}
+    _product_loop!(+, reinterpret(reshape, Tf, A), m, reinterpret(reshape, Tf, F), one(Tf))
+    return A
+end
+
+# Zr[:, I] = op(Zr[:, I], s · f1[I] · f2[I] · Yr[:, I]) over the 3-D grid I, with
+# Zr and Yr complex arrays read as reals, the factors broadcast.
+function _product_loop!(op::O, Zr, m::_ProductMask, Yr, s) where {O}
+    f1, f2 = m.f1, m.f2
+    size(f2, 1) == 1 && size(f1, 1) != 1 && return _product_loop!(op, Zr, _ProductMask(f2, f1), Yr, s)
+    _, n1, n2, n3 = size(Zr)
+    sq(f, d, i) = size(f, d) == 1 ? 1 : i
+    @inbounds for k in 1:n3, j in 1:n2
+        j1, k1, j2, k2 = sq(f1, 2, j), sq(f1, 3, k), sq(f2, 2, j), sq(f2, 3, k)
+        if size(f1, 1) != 1
+            @simd for i in 1:n1
+                _product_pair!(op, Zr, Yr, i, j, k, s * f1[i, j1, k1] * f2[i, j2, k2])
+            end
+        elseif size(f2, 1) != 1
+            a = s * f1[1, j1, k1]
+            @simd for i in 1:n1
+                _product_pair!(op, Zr, Yr, i, j, k, a * f2[i, j2, k2])
+            end
+        else
+            w = s * f1[1, j1, k1] * f2[1, j2, k2]
+            @simd for i in 1:n1
+                _product_pair!(op, Zr, Yr, i, j, k, w)
+            end
+        end
+    end
+    return Zr
+end
+
+@inline function _product_pair!(op::O, Zr, Yr, i, j, k, w) where {O}
+    @inbounds Zr[1, i, j, k] = op(Zr[1, i, j, k], w * Yr[1, i, j, k])
+    @inbounds Zr[2, i, j, k] = op(Zr[2, i, j, k], w * Yr[2, i, j, k])
+    return nothing
 end
 
 """
@@ -50,120 +90,29 @@ end
 The masks of a system: the analysis mask of every subband, the synthesis mask of
 every group of consecutive subbands (`groups`, in order, covering them all), and
 the post-factor of the synthesis sum (`nothing` for none).
-`_MaskSet(ana; post)` has a group per subband with the analysis masks.
+`_MaskSet(ana; post)` has a group per subband with the analysis masks
+(`groups = nothing`).
 """
-struct _MaskSet{M <: _FrequencyMask, P}
-    ana::Vector{M}
-    syn::Vector{M}
-    groups::Vector{UnitRange{Int}}
+struct _MaskSet{A <: AbstractVector, S <: AbstractVector, G <: Union{Vector{UnitRange{Int}}, Nothing}, P}
+    ana::A
+    syn::S
+    groups::G
     post::P
 end
 
-_MaskSet(ana::Vector; post = nothing) = _MaskSet(ana, ana, [i:i for i in eachindex(ana)], post)
+_MaskSet(ana::AbstractVector; post = nothing) = _MaskSet(ana, ana, nothing, post)
 
-# The dense products use FastBroadcast's `@..`: Base's broadcast checks every axis
-# for a singleton at run time, which keeps them from vectorising.  Device arrays
-# fall back to Base's broadcast.  (`@..` does not take indexed views, so the
-# sparse gather/scatter stays Base's.)
-
-# Z = s · A · X with X channel c of the spectra (as the N+1-dimensional `X` and
-# as the matrix `Xm`); Zv is Z as a vector.
-# The sparse views skip their bounds check: on a device it reduces the index
-# array and reads the result back, a synchronisation per subband.  The support
-# indices lie on the grid by construction.
-function _mask_apply!(Z, Zv, m::_SparseMask, X, Xm, c::Int, s)
-    fill!(Z, zero(eltype(Z)))
-    @inbounds view(Zv, m.idx) .= (m.val .* s) .* view(Xm, m.idx, c)
-    return Z
-end
-
-function _mask_apply!(Z, Zv, m::_DenseMask, X, Xm, c::Int, s)
-    v, Xc = m.val, view(Xm, :, c)
-    @.. Zv = (v * s) * Xc
-    return Z
-end
-
-function _mask_apply!(Z, Zv, m::_ProductMask, X, Xm, c::Int, s)
-    Z .= (s .* m.f1 .* m.f2) .* selectdim(X, ndims(X), c)
-    return Z
-end
-
-# Channel c of the accumulator (the N+1-dimensional `a`, or the matrix `am`) += s · S · F.
-function _mask_accumulate!(a, am, m::_SparseMask, F, Fv, c::Int, s)
-    @inbounds view(am, m.idx, c) .+= (m.val .* s) .* view(Fv, m.idx)
-    return am
-end
-
-function _mask_accumulate!(a, am, m::_DenseMask, F, Fv, c::Int, s)
-    v, ac = m.val, view(am, :, c)
-    @.. ac += (v * s) * Fv
-    return am
-end
-
-function _mask_accumulate!(a, am, m::_ProductMask, F, Fv, c::Int, s)
-    selectdim(a, ndims(a), c) .+= (s .* m.f1 .* m.f2) .* F
-    return a
-end
-
-# On the host the products of `_ProductMask`s are loops: Base's broadcast over
-# the singleton axes of the factors does not vectorise, nor does a complex
-# product, so the complex arrays are read as pairs of reals.  The first axis is
-# innermost, and a factor without it is a scalar along it.
-const _HostProduct{Tf} = _ProductMask{Tf, Array{Tf, 3}, Array{Tf, 3}}
-
-function _mask_apply!(Z::Array{Complex{Tf}, 3}, Zv, m::_HostProduct{Tf}, X::Array{Complex{Tf}, 4}, Xm, c::Int, s) where {Tf}
-    _product_loop!((z, v) -> v, reinterpret(reshape, Tf, Z), (), m, reinterpret(reshape, Tf, X), (c,), s)
-    return Z
-end
-
-function _mask_accumulate!(a::Array{Complex{Tf}, 4}, am, m::_HostProduct{Tf}, F::Array{Complex{Tf}, 3}, Fv, c::Int, s) where {Tf}
-    _product_loop!(+, reinterpret(reshape, Tf, a), (c,), m, reinterpret(reshape, Tf, F), (), s)
-    return a
-end
-
-# Zr[:, I, zc...] = op(Zr[:, I, zc...], s · f1[I] · f2[I] · Yr[:, I, yc...]) over
-# the 3-D grid I, with Zr and Yr complex arrays read as reals, the factors
-# broadcast.
-function _product_loop!(op::O, Zr, zc::Tuple, m::_ProductMask, Yr, yc::Tuple, s) where {O}
-    f1, f2 = m.f1, m.f2
-    size(f2, 1) == 1 && size(f1, 1) != 1 && return _product_loop!(op, Zr, zc, _ProductMask(f2, f1), Yr, yc, s)
-    _, n1, n2, n3 = size(Zr)
-    sq(f, d, i) = size(f, d) == 1 ? 1 : i
-    @inbounds for k in 1:n3, j in 1:n2
-        j1, k1, j2, k2 = sq(f1, 2, j), sq(f1, 3, k), sq(f2, 2, j), sq(f2, 3, k)
-        if size(f1, 1) != 1
-            @simd for i in 1:n1
-                _product_pair!(op, Zr, zc, Yr, yc, i, j, k, s * f1[i, j1, k1] * f2[i, j2, k2])
-            end
-        elseif size(f2, 1) != 1
-            a = s * f1[1, j1, k1]
-            @simd for i in 1:n1
-                _product_pair!(op, Zr, zc, Yr, yc, i, j, k, a * f2[i, j2, k2])
-            end
-        else
-            w = s * f1[1, j1, k1] * f2[1, j2, k2]
-            @simd for i in 1:n1
-                _product_pair!(op, Zr, zc, Yr, yc, i, j, k, w)
-            end
-        end
-    end
-    return Zr
-end
-
-@inline function _product_pair!(op::O, Zr, zc, Yr, yc, i, j, k, w) where {O}
-    @inbounds Zr[1, i, j, k, zc...] = op(Zr[1, i, j, k, zc...], w * Yr[1, i, j, k, yc...])
-    @inbounds Zr[2, i, j, k, zc...] = op(Zr[2, i, j, k, zc...], w * Yr[2, i, j, k, yc...])
-    return nothing
-end
+# The groups of subbands that share a synthesis mask.
+_groups(ms::_MaskSet) = something(ms.groups, [i:i for i in eachindex(ms.ana)])
 
 # The mask as a full array on the `rfft` grid `rd`.
-function _dense_mask(m::_SparseMask{Tf}, rd::Tuple) where {Tf}
-    out = zeros(Tf, rd)
+function _dense_mask(m::SparseMask, rd::Tuple)
+    out = zeros(eltype(m.val), rd)
     out[m.idx] .= m.val
     return out
 end
 
-_dense_mask(m::_DenseMask, rd::Tuple) = copy(reshape(m.val, rd))
+_dense_mask(m::AbstractArray, rd::Tuple) = copy(reshape(m, rd))
 _dense_mask(m::_ProductMask{Tf}, rd::Tuple) where {Tf} = (out = zeros(Tf, rd); out .= m.f1 .* m.f2; out)
 
 # The `rfft` grid of real data of size `dims`: the first axis halved.
@@ -222,7 +171,7 @@ function _alias_sample!(acc, v, evaluate!::F, I::CartesianIndex{N}, grid::NTuple
 end
 
 """
-    _pointwise_masks(evaluate!, nmasks, dims, Tf) -> Vector{_SparseMask{Tf}}
+    _pointwise_masks(evaluate!, nmasks, dims, Tf) -> Vector{SparseMask}
 
 Sample `nmasks` point-symmetric masks given pointwise (see `_alias_sample!`,
 with root mean squares on the Nyquist planes) on the `rfft` grid of a `dims`
@@ -241,5 +190,6 @@ function _pointwise_masks(evaluate!::F, nmasks::Int, dims::NTuple{N, Int}, ::Typ
             end
         end
     end
-    return [_SparseMask(idx[i], val[i]) for i in 1:nmasks]
+    rd = _rfft_dims(dims)
+    return [SparseMask(rd, idx[i], val[i]) for i in 1:nmasks]
 end

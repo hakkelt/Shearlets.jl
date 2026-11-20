@@ -148,8 +148,9 @@ function _shearlet_masks(sys::NSSTShearlets, dims::NTuple{2, Int}, ::Type{Tf}) w
     a2, gh2, s2 = nsp_responses(sys.pyramid, J, dims[2])
     realpart(z) = (maximum(abs ∘ imag, z) < 1.0e-10 || throw(ArgumentError("the pyramid response is not real")); real.(z))
     sep(u, v) = vec(realpart(u .* transpose(v)))
-    ana = [_DenseMask(Tf.(sep(a1[J + 1], a2[J + 1])))]
-    syn = [_DenseMask(Tf.(sep(s1[J + 1], s2[J + 1])))]
+    grid(v) = reshape(Tf.(v), rd)
+    ana = [grid(sep(a1[J + 1], a2[J + 1]))]
+    syn = [grid(sep(s1[J + 1], s2[J + 1]))]
     groups = [1:1]
     # Levels with the same shears and filter size share their shearing masks.
     shearing = Dict{Tuple{Int, Int}, Vector{Vector{Float64}}}()
@@ -159,10 +160,10 @@ function _shearlet_masks(sys::NSSTShearlets, dims::NTuple{2, Int}, ::Type{Tf}) w
         first = length(ana) + 1
         s, L = _nsst_shears(sys.directions[j]), sys.filter_size[j]
         for W in get!(() -> _nsst_shearing_masks(dims, s, L), shearing, (s, L))
-            push!(ana, _DenseMask(Tf.(B .* W)))
+            push!(ana, grid(B .* W))
         end
         push!(groups, first:length(ana))
-        push!(syn, _DenseMask(Tf.(sep(s1[lvl], s2[lvl]))))
+        push!(syn, grid(sep(s1[lvl], s2[lvl])))
     end
     return _MaskSet(ana, syn, groups, nothing)
 end

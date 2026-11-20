@@ -33,8 +33,6 @@ transform is one FFT plus one inverse FFT per subband.  The coefficients of
 module Shearlets
 
 using FFTW: FFTW, plan_rfft, plan_brfft
-using LinearAlgebra: mul!
-using FastBroadcast: @..
 
 using MultiscaleTransformsBase: MultiscaleTransformsBase, AbstractMultiscaleTransform, AbstractTransformWorkspace,
     analyze, analyze!, synthesize, synthesize!, make_workspace, transform, similar_coefficients,
@@ -42,8 +40,9 @@ using MultiscaleTransformsBase: MultiscaleTransformsBase, AbstractMultiscaleTran
 
 using MultiscaleFilterBanks: MultiscaleFilterBanks,
     FilterPair, CDF97, upsample_filter,
-    data_eltype, n_tasks, foreach_chunk, chunked_sum!, loop_threaded, with_fftw_threads, nsp_responses,
-    even_chunks, leading_slices, DEFAULT_CHUNK_SAMPLES
+    data_eltype, loop_threaded, with_fftw_threads, nsp_responses, DEFAULT_CHUNK_SAMPLES,
+    MaskBankEngine, MaskBank, MaskItem, SparseMask, IdentityMask, mask_apply!,
+    mask_bank_forward!, mask_bank_inverse!, mask_bank_stream_forward!, mask_bank_stream_inverse!, tune_mask_bank
 
 # ── Types ─────────────────────────────────────────────────────────────────────
 include("types/index.jl")
@@ -52,7 +51,6 @@ include("types/system.jl")
 # ── Mask engine ───────────────────────────────────────────────────────────────
 include("engine/masks.jl")
 include("engine/workspace.jl")
-include("engine/batched.jl")
 
 # ── Shearlet systems ──────────────────────────────────────────────────────────
 include("systems/windows.jl")

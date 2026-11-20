@@ -267,7 +267,7 @@ function _shearlet_masks(sys::CompactShearlets, dims::NTuple{2, Int}, ::Type{Tf}
         end
     end
     post = _compact_post(sum(a -> a .^ 2, responses), dims, Tf)
-    return _MaskSet([_DenseMask(Tf.(vec(a))) for a in responses]; post)
+    return _MaskSet([Tf.(a) for a in responses]; post)
 end
 
 # ── Three dimensions ─────────────────────────────────────────────────────────

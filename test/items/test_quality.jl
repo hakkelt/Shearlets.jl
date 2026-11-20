@@ -16,6 +16,6 @@ end
     test_explicit_imports(
         Shearlets;
         all_explicit_imports_are_public = public_checks ? (; ignore = internal) : false,
-        all_qualified_accesses_are_public = public_checks ? (; ignore = (:ESTIMATE, :MEASURE, :alignment_of, :Slice, :size_to_strides, internal...)) : false,
+        all_qualified_accesses_are_public = public_checks ? (; ignore = (:ESTIMATE, :MEASURE, :UNALIGNED, :alignment_of, :Slice, :size_to_strides, internal...)) : false,
     )
 end

@@ -33,7 +33,7 @@ end
             c = analyze(sys, xg; workspace = ws)
             # A workspace made from device data lives on its device.
             wd = make_workspace(sys, xg)
-            @test wd.rbufs[1][1] isa typeof(xg).name.wrapper
+            @test wd.xbuf isa typeof(xg).name.wrapper
             @test maximum(abs, Array(analyze(wd, xg)) .- ref) < 1.0f-4 * maximum(abs, ref)
             @test maximum(abs, Array(c) .- ref) < 1.0f-4 * maximum(abs, ref)
             @test maximum(abs, Array(synthesize(sys, c; workspace = ws)) .- x) < 1.0f-4 * maximum(abs, x)
@@ -43,7 +43,7 @@ end
             @test y isa typeof(xg).name.wrapper
             @test maximum(abs, Array(y) .- x) < 1.0f-4 * maximum(abs, x)
             # CUDA has batched plans, so the workspace is chunked (one chunk at these sizes).
-            typeof(xg).name.name === :CuArray && @test ws.batch !== nothing
+            typeof(xg).name.name === :CuArray && @test ws.engine.batch !== nothing
         end
     end
 end
@@ -51,7 +51,6 @@ end
 @testitem "GPU chunked transforms match the CPU" tags = [:gpu] setup = [GPUBackends, ChunkCases] begin
     using GPUEnv, Random
     const Adapt = GPUBackends.Adapt
-    const S = Shearlets
     rng = Xoshiro(5)
     for (sys, dims) in ChunkCases.cases, T in (Float32, ComplexF32)
         x = ChunkCases.random_input(rng, T, dims)
@@ -62,13 +61,13 @@ end
             ws = Adapt.adapt(typeof(xg).name.wrapper, cpu)
             # Uneven chunks with a short last one, and chunks of two.
             for k in (5, 2)
-                wb = S._with_batch(ws, S._make_batch(ws, k))
+                wb = ChunkCases.rechunk(ws, k)
                 c = analyze(sys, xg; workspace = wb)
                 @test maximum(abs, Array(c) .- ref) < 1.0f-4 * maximum(abs, ref)
                 @test maximum(abs, Array(synthesize(sys, c; workspace = wb)) .- x) < 1.0f-4 * maximum(abs, x)
             end
             tw = make_workspace(sys, xg; tune = true)
-            @test tw.batch === nothing || tw.batch.B isa typeof(xg).name.wrapper
+            @test tw.engine.batch === nothing || tw.engine.batch.B[1] isa typeof(xg).name.wrapper
             c = analyze(sys, xg; workspace = tw)
             @test maximum(abs, Array(c) .- ref) < 1.0f-4 * maximum(abs, ref)
             @test maximum(abs, Array(synthesize(sys, c; workspace = tw)) .- x) < 1.0f-4 * maximum(abs, x)
@@ -76,12 +75,10 @@ end
     end
 end
 
-@testitem "GPU NSST group sums by reduction" tags = [:gpu] setup = [GPUBackends, ChunkCases] begin
+@testitem "GPU NSST at 512²" tags = [:gpu] setup = [GPUBackends, ChunkCases] begin
     using GPUEnv, Random
     const Adapt = GPUBackends.Adapt
-    # Large enough that the stacked inverse sums each level by one reduction.
     sys, dims = NSSTShearlets(directions = [2, 3]), (512, 512)
-    @test prod(dims) >= Shearlets._GROUP_SUM_SAMPLES
     rng = Xoshiro(9)
     for T in (Float32, ComplexF32)
         x = ChunkCases.random_input(rng, T, dims)

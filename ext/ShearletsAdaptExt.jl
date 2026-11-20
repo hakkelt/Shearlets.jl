@@ -1,6 +1,7 @@
 module ShearletsAdaptExt
 
-# Shearlet transforms on a device, in `Adapt.adapt_structure` methods alone.
+# Shearlet transforms on a device, in Adapt methods alone, plus the device
+# routing of `make_workspace(sys, x)` (`Shearlets._to_device`).
 #
 # No kernel is needed and none is written here.  Every transform is an FFT, a
 # masked product per subband and an inverse FFT, and every mask is applied by a
@@ -11,8 +12,9 @@ module ShearletsAdaptExt
 # `plan_rfft` / `plan_brfft` (AbstractFFTs generics) are called again on the
 # adapted buffers and dispatch to the backend's FFT library:
 #
-#     ws = Adapt.adapt(CuArray, make_shearlet_workspace(Float32, dims, system))
-#     c  = shearlet_forward(CuArray(x), system; workspace = ws)
+#     ws = make_workspace(system, xg)             # xg a device array, or
+#     ws = Adapt.adapt(CuArray, make_workspace(system, Float32, dims))
+#     c  = analyze(system, xg; workspace = ws)
 #
 # The device workspace runs its subbands in one task: the device's FFTs are
 # parallel already.  It transforms them in chunks of several subbands, one batched
@@ -65,5 +67,16 @@ function Adapt.adapt_structure(to, ws::ShearletWorkspace{Td, Tf, N}) where {Td, 
     # `nothing`, the per-subband engine, when the FFT library has no batched plans.
     return Shearlets._with_batch(dws, Shearlets._make_batch(dws, k))
 end
+
+# Adapts host arrays to arrays like `proto` (the storage of some device array).
+struct _Like{A <: AbstractArray}
+    proto::A
+end
+
+Adapt.adapt_storage(to::_Like, a::AbstractArray) = copyto!(similar(to.proto, eltype(a), size(a)), a)
+
+_storage(x::AbstractArray) = (p = parent(x); p === x ? x : _storage(p))
+
+Shearlets._to_device(ws::ShearletWorkspace, x::AbstractArray) = Adapt.adapt(_Like(_storage(x)), ws)
 
 end # module ShearletsAdaptExt

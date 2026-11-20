@@ -25,17 +25,21 @@ end
     rng = Xoshiro(42)
     for (sys, dims) in ChunkCases.cases, T in (Float32, ComplexF32)
         x = ChunkCases.random_input(rng, T, dims)
-        cpu = make_shearlet_workspace(T, dims, sys)
-        ref = shearlet_forward(x, sys; workspace = cpu)
+        cpu = make_workspace(sys, T, dims)
+        ref = analyze(sys, x; workspace = cpu)
         for backend in GPUBackends.fft_backends
             xg = to_gpu(backend, x)
             ws = Adapt.adapt(typeof(xg).name.wrapper, cpu)
-            c = shearlet_forward(xg, sys; workspace = ws)
+            c = analyze(sys, xg; workspace = ws)
+            # A workspace made from device data lives on its device.
+            wd = make_workspace(sys, xg)
+            @test wd.rbufs[1][1] isa typeof(xg).name.wrapper
+            @test maximum(abs, Array(analyze(wd, xg)) .- ref) < 1.0f-4 * maximum(abs, ref)
             @test maximum(abs, Array(c) .- ref) < 1.0f-4 * maximum(abs, ref)
-            @test maximum(abs, Array(shearlet_inverse(c, sys; workspace = ws)) .- x) < 1.0f-4 * maximum(abs, x)
-            @test_throws ArgumentError shearlet_forward(xg, sys)
+            @test maximum(abs, Array(synthesize(sys, c; workspace = ws)) .- x) < 1.0f-4 * maximum(abs, x)
+            @test_throws ArgumentError analyze(sys, xg)
             # The streaming inverse returns device data.
-            y = shearlet_inverse(i -> selectdim(c, ndims(c), i), sys, dims; T = T, workspace = ws)
+            y = synthesize!(i -> selectdim(c, ndims(c), i), similar(xg), sys; workspace = ws)
             @test y isa typeof(xg).name.wrapper
             @test maximum(abs, Array(y) .- x) < 1.0f-4 * maximum(abs, x)
             # CUDA has batched plans, so the workspace is chunked (one chunk at these sizes).
@@ -51,22 +55,23 @@ end
     rng = Xoshiro(5)
     for (sys, dims) in ChunkCases.cases, T in (Float32, ComplexF32)
         x = ChunkCases.random_input(rng, T, dims)
-        cpu = make_shearlet_workspace(T, dims, sys)
-        ref = shearlet_forward(x, sys; workspace = cpu)
+        cpu = make_workspace(sys, T, dims)
+        ref = analyze(sys, x; workspace = cpu)
         for backend in GPUBackends.fft_backends
             xg = to_gpu(backend, x)
             ws = Adapt.adapt(typeof(xg).name.wrapper, cpu)
             # Uneven chunks with a short last one, and chunks of two.
             for k in (5, 2)
                 wb = S._with_batch(ws, S._make_batch(ws, k))
-                c = shearlet_forward(xg, sys; workspace = wb)
+                c = analyze(sys, xg; workspace = wb)
                 @test maximum(abs, Array(c) .- ref) < 1.0f-4 * maximum(abs, ref)
-                @test maximum(abs, Array(shearlet_inverse(c, sys; workspace = wb)) .- x) < 1.0f-4 * maximum(abs, x)
+                @test maximum(abs, Array(synthesize(sys, c; workspace = wb)) .- x) < 1.0f-4 * maximum(abs, x)
             end
-            tw = tune_shearlet_workspace(ws)
-            c = shearlet_forward(xg, sys; workspace = tw)
+            tw = make_workspace(sys, xg; tune = true)
+            @test tw.batch === nothing || tw.batch.B isa typeof(xg).name.wrapper
+            c = analyze(sys, xg; workspace = tw)
             @test maximum(abs, Array(c) .- ref) < 1.0f-4 * maximum(abs, ref)
-            @test maximum(abs, Array(shearlet_inverse(c, sys; workspace = tw)) .- x) < 1.0f-4 * maximum(abs, x)
+            @test maximum(abs, Array(synthesize(sys, c; workspace = tw)) .- x) < 1.0f-4 * maximum(abs, x)
         end
     end
 end
@@ -80,12 +85,12 @@ end
     rng = Xoshiro(9)
     for T in (Float32, ComplexF32)
         x = ChunkCases.random_input(rng, T, dims)
-        cpu = make_shearlet_workspace(T, dims, sys)
-        ref = shearlet_forward(x, sys; workspace = cpu)
+        cpu = make_workspace(sys, T, dims)
+        ref = analyze(sys, x; workspace = cpu)
         for backend in GPUBackends.fft_backends
             ws = Adapt.adapt(typeof(to_gpu(backend, x)).name.wrapper, cpu)
             c = to_gpu(backend, ref)
-            @test maximum(abs, Array(shearlet_inverse(c, sys; workspace = ws)) .- x) < 1.0f-4 * maximum(abs, x)
+            @test maximum(abs, Array(synthesize(sys, c; workspace = ws)) .- x) < 1.0f-4 * maximum(abs, x)
         end
     end
 end

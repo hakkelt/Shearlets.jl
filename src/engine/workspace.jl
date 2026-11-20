@@ -14,13 +14,16 @@
 # (`chunked_sum!`).  FFT plans are single-threaded.
 
 """
-    ShearletWorkspace{Td, Tf, N}
+    ShearletWorkspace{Td, Tf, N} <: AbstractTransformWorkspace
 
 Masks, FFT plans and buffers of a shearlet system at one data size and element
 type `Td` (filters in `Tf = real(float(Td))`).  Build with
-[`make_shearlet_workspace`](@ref) and pass it as `workspace` to
-[`shearlet_forward`](@ref) / [`shearlet_inverse`](@ref) to keep repeated calls
-out of the allocator.
+[`make_workspace`](@ref make_workspace(::ShearletSystem, ::Type{<:Number}, ::Dims))
+and pass it as `workspace` to [`analyze`](@ref analyze(::ShearletSystem, ::AbstractArray{<:Number}))
+/ [`synthesize`](@ref synthesize(::ShearletSystem, ::AbstractArray{<:Number})) to keep
+repeated calls out of the allocator, or call the verbs on the workspace alone
+(`analyze(ws, x)`, `synthesize!(x, ws, c)`, ...).  `transform(ws)` is the
+system, `eltype(ws)` the data element type `Td` and `size(ws)` the data size.
 
 A workspace holds scratch buffers, so it must not serve two transforms at the
 same time; it threads internally instead.
@@ -29,7 +32,7 @@ struct ShearletWorkspace{
         Td, Tf, N, S <: ShearletSystem, MS <: _MaskSet,
         C <: AbstractArray{Complex{Tf}}, CM <: AbstractMatrix{Complex{Tf}}, B <: AbstractArray{Complex{Tf}, N},
         V <: AbstractVector{Complex{Tf}}, R <: AbstractArray{Tf, N}, P, Q, BT,
-    }
+    } <: AbstractTransformWorkspace
     system::S
     dims::NTuple{N, Int}
     masks::MS
@@ -55,14 +58,47 @@ _nsubbands(ws::ShearletWorkspace) = length(ws.masks.ana)
 _threaded(threaded::Union{Bool, Nothing}) = loop_threaded(threaded !== false)
 
 """
-    make_shearlet_workspace(T, dims, system; flags = FFTW.MEASURE) -> ShearletWorkspace
+    make_workspace(system::ShearletSystem, T::Type{<:Number}, dims::Dims; flags = FFTW.MEASURE) -> ShearletWorkspace
 
-Build the masks, buffers and FFT plans of `system` for data of element type `T`
-(real or complex) and size `dims`.  `flags` are the FFTW planner flags.
+Build the masks, buffers and FFT plans of `system` for host data of element
+type `T` (real or complex; integers count as `float(T)`) and size `dims`.
+`flags` are the FFTW planner flags.  The workspace threads over the subbands.
 """
-function make_shearlet_workspace(::Type{T}, dims::NTuple{N, Int}, sys::ShearletSystem; flags::UInt32 = FFTW.MEASURE) where {T <: Number, N}
+function MultiscaleTransformsBase.make_workspace(sys::ShearletSystem, ::Type{T}, dims::Dims; flags::UInt32 = FFTW.MEASURE) where {T <: Number}
     return _make_workspace(T, dims, sys, flags, true)
 end
+
+"""
+    make_workspace(system::ShearletSystem, x::AbstractArray; flags = FFTW.MEASURE, tune = false) -> ShearletWorkspace
+
+The workspace of `system` for data like `x`: its element type, size and
+device.  For a host array this is `make_workspace(system, eltype(x), size(x); flags)`.
+
+For a device array (a `CuArray`, say) the masks are built on the host and
+moved to the device by the Adapt extension; the FFT plans are the device FFT
+library's.  A device workspace transforms its subbands in chunks, one batched
+FFT per chunk, with a chunk size that by default follows from the grid size.
+`tune = true` measures instead: it times one subband at a time and every chunk
+size worth trying, on a forward and an inverse transform each, and keeps the
+default unless another is 5% faster.  Tuning takes a fraction of a second once
+compiled and holds a coefficient array and the stacks of one more chunk size on
+the device meanwhile; the transform itself is unchanged.  On the host `tune`
+does nothing: a host workspace threads over subbands instead.
+
+```julia
+ws = make_workspace(system, CuArray{Float32}(undef, 256, 256); tune = true)
+```
+"""
+function MultiscaleTransformsBase.make_workspace(sys::ShearletSystem, x::AbstractArray; flags::UInt32 = FFTW.MEASURE, tune::Bool = false)
+    ws = make_workspace(sys, eltype(x), size(x); flags)
+    _on_host(x) && return ws
+    dws = _to_device(ws, x)
+    return tune ? _tune_batch(dws) : dws
+end
+
+# `ws` moved to the device of `x`; a method of the Adapt extension.
+_to_device(ws, x) =
+    throw(ArgumentError("a workspace for $(typeof(x)) data needs the Adapt extension: load Adapt"))
 
 # A host workspace, with buffers for one task per thread when `threaded`, else one.
 function _make_workspace(::Type{T}, dims::NTuple{N, Int}, sys::ShearletSystem, flags::UInt32, threaded::Bool) where {T, N}
@@ -121,32 +157,26 @@ _with_batch(ws::ShearletWorkspace, batch) = ShearletWorkspace{eltype(ws)}(
     ws.bufs, ws.bufs_v, ws.rbufs, ws.pfwd, ws.pinv, ws.scale, batch
 )
 
-# The masks of `system` at size `dims`, after `shearlet_layout` checked that the
+# The masks of `system` at size `dims`, after `subband_layout` checked that the
 # system supports that many dimensions.
 function _system_masks(sys::ShearletSystem, dims::Tuple, ::Type{Tf}) where {Tf}
-    n = length(shearlet_layout(sys, dims))
+    n = length(subband_layout(sys, dims))
     masks = _shearlet_masks(sys, dims, Tf)
     @assert length(masks.ana) == n
     return masks
 end
-
-make_shearlet_workspace(::Type{T}, dims::Tuple, sys::ShearletSystem; kwargs...) where {T <: Number} =
-    make_shearlet_workspace(T, Tuple(Int.(dims)), sys; kwargs...)
 
 # The workspace for one call: `workspace` after checking it fits, else a new one.
 function _workspace(workspace, sys::ShearletSystem, dims::Tuple, ::Type{Td}, threaded::Bool) where {Td}
     if workspace === nothing
         return _make_workspace(Td, Tuple(Int.(dims)), sys, FFTW.ESTIMATE, threaded)
     end
-    workspace.dims == dims ||
-        throw(DimensionMismatch("workspace was built for size $(workspace.dims), got $(dims)"))
-    _nchannels(workspace) == _nchannels(Td) && real(eltype(workspace)) == real(Td) ||
-        throw(ArgumentError("workspace was built for $(eltype(workspace)) data, got $(Td)"))
-    workspace.system == sys || throw(ArgumentError("workspace was built for a different shearlet system"))
-    return workspace
+    return check_workspace(workspace, sys, Td, dims)
 end
 
-Base.eltype(::ShearletWorkspace{Td}) where {Td} = Td
+MultiscaleTransformsBase.transform(ws::ShearletWorkspace) = ws.system
+Base.eltype(::Type{<:ShearletWorkspace{Td}}) where {Td} = Td
+Base.size(ws::ShearletWorkspace) = ws.dims
 
 # F = rfft of channel `c` of `x`, read by the plan `p` directly if it can, else
 # through the real buffer `rb`.

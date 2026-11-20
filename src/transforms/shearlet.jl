@@ -1,16 +1,17 @@
-# Public transforms over the mask engine (`engine/workspace.jl`).
+# The shearlet systems as MultiscaleTransformsBase transforms, over the mask
+# engine (`engine/workspace.jl`).
 #
 # Coefficients are one array of size `(size(x)..., nsubbands)`: every subband has
 # the size of the input, so stacking them costs no memory over separate arrays
 # and keeps the whole set in one allocation, sliced with `selectdim(c, N + 1, i)`.
-# `shearlet_layout(system, size(x))[i]` says what subband `i` is.
+# `subband_layout(system, size(x))[i]` says what subband `i` is.
 
 _coefficient_size(ws::ShearletWorkspace) = (ws.dims..., _nsubbands(ws))
 
-# Masks are built on the host; device data needs a workspace adapted to it.
+# Masks are built on the host; device data needs a workspace for its device.
 function _check_host(workspace, x::AbstractArray)
     workspace === nothing && !_on_host(x) &&
-        throw(ArgumentError("pass a `workspace` for $(typeof(x)) data: `Adapt.adapt(ArrayType, make_shearlet_workspace(T, dims, system))`"))
+        throw(ArgumentError("pass a `workspace` for $(typeof(x)) data: `make_workspace(system, x)`"))
     return nothing
 end
 
@@ -25,14 +26,43 @@ function _check_coefficients(coeffs::AbstractArray, ws::ShearletWorkspace)
     return nothing
 end
 
+MultiscaleTransformsBase.supports_streaming(::ShearletSystem) = true
+
 """
-    shearlet_forward(x, system::ShearletSystem; workspace = nothing, threaded = nothing) -> Array
+    subband(system::ShearletSystem, c, i) -> AbstractArray
+
+Subband `i` of the coefficients `c` of `system`: the view `selectdim(c, ndims(c), i)`.
+"""
+MultiscaleTransformsBase.subband(::ShearletSystem, c::AbstractArray, i::Integer) = selectdim(c, ndims(c), i)
+
+"""
+    similar_coefficients(system::ShearletSystem, x) -> AbstractArray
+
+Uninitialised coefficients of `system` for data like `x`: an array like `x`
+(host or device) of element type `float(eltype(x))` and size
+`(size(x)..., nsubbands(system, size(x)))`.
+"""
+MultiscaleTransformsBase.similar_coefficients(sys::ShearletSystem, x::AbstractArray) =
+    similar(x, data_eltype(x), (size(x)..., nsubbands(sys, size(x))))
+
+MultiscaleTransformsBase.signal_size(::ShearletSystem, c::AbstractArray) = Base.front(size(c))
+
+"""
+    analyze(system::ShearletSystem, x; workspace = nothing, threaded = nothing) -> AbstractArray
 
 Shearlet transform of `x`: an array of size `(size(x)..., n)` whose slice `i`
-along the last axis is the subband `shearlet_layout(system, size(x))[i]` (the
-lowpass first).  The transform is invariant under circular shifts of `x`;
-real input gives real subbands.  The subbands are computed in parallel unless
-`threaded = false`.
+along the last axis (`subband(system, c, i)`) is the subband
+`subband_layout(system, size(x))[i]` (the lowpass first).  The transform is
+invariant under circular shifts of `x`; real input gives real subbands, and
+complex input is transformed as its real and imaginary parts, so
+`analyze(system, complex.(a, b)) == complex.(analyze(system, a), analyze(system, b))`
+exactly.  The subbands are computed in parallel unless `threaded = false`
+(`nothing` threads).
+
+`workspace` is a [`ShearletWorkspace`](@ref) for this system, element type and
+size; device data needs one (see
+[`make_workspace`](@ref make_workspace(::ShearletSystem, ::AbstractArray))).
+Without one, masks and plans are built for the call.
 
 # Examples
 ```jldoctest
@@ -40,7 +70,7 @@ julia> using Shearlets, Random
 
 julia> x = randn(Xoshiro(1), 64, 64);
 
-julia> c = shearlet_forward(x, BandlimitedShearlets(scales = 2));
+julia> c = analyze(BandlimitedShearlets(scales = 2), x);
 
 julia> size(c)
 (64, 64, 13)
@@ -49,25 +79,25 @@ julia> sum(abs2, c) ≈ sum(abs2, x)   # a Parseval frame
 true
 ```
 """
-function shearlet_forward(
-        x::AbstractArray{<:Number}, sys::ShearletSystem;
+function MultiscaleTransformsBase.analyze(
+        sys::ShearletSystem, x::AbstractArray{<:Number};
         workspace::Union{ShearletWorkspace, Nothing} = nothing, threaded::Union{Bool, Nothing} = nothing
     )
     _check_host(workspace, x)
     Td = data_eltype(x)
     ws = _workspace(workspace, sys, size(x), Td, _threaded(threaded))
     coeffs = similar(x, Td, _coefficient_size(ws))
-    return shearlet_forward!(coeffs, x, sys; workspace = ws, threaded = threaded)
+    return analyze!(coeffs, sys, x; workspace = ws, threaded)
 end
 
 """
-    shearlet_forward!(coeffs, x, system::ShearletSystem; workspace = nothing, threaded = nothing) -> coeffs
+    analyze!(c, system::ShearletSystem, x; workspace = nothing, threaded = nothing) -> c
 
-In-place [`shearlet_forward`](@ref).  With a `workspace` it allocates nothing
-but the threads' tasks.
+In-place [`analyze`](@ref analyze(::ShearletSystem, ::AbstractArray{<:Number})).  With a
+`workspace` it allocates nothing but the threads' tasks.
 """
-function shearlet_forward!(
-        coeffs::AbstractArray{<:Number}, x::AbstractArray{<:Number}, sys::ShearletSystem;
+function MultiscaleTransformsBase.analyze!(
+        coeffs::AbstractArray{<:Number}, sys::ShearletSystem, x::AbstractArray{<:Number};
         workspace::Union{ShearletWorkspace, Nothing} = nothing, threaded::Union{Bool, Nothing} = nothing
     )
     _check_host(workspace, x)
@@ -100,16 +130,18 @@ function _forward_into!(coeffs::AbstractArray, x::AbstractArray, ws::ShearletWor
 end
 
 """
-    shearlet_forward(f, x, system::ShearletSystem; workspace = nothing)
+    analyze(f, system::ShearletSystem, x; workspace = nothing, threaded = nothing) -> nothing
 
 Streaming shearlet transform: calls `f(i, band)` for every subband `i` in
-`shearlet_layout` order, reusing one buffer between calls, so the coefficient
+`subband_layout` order, reusing one buffer between calls, so the coefficient
 set is never held at once.  `band` is valid only until `f` returns — copy or
-reduce it there.  The calls come one at a time, from the calling task.
+reduce it there.  The subbands are computed one at a time and `f` is called
+from the calling task, whatever `threaded` says (it is accepted for the
+common interface).
 """
-function shearlet_forward(
-        f, x::AbstractArray{<:Number}, sys::ShearletSystem;
-        workspace::Union{ShearletWorkspace, Nothing} = nothing
+function MultiscaleTransformsBase.analyze(
+        f, sys::ShearletSystem, x::AbstractArray{<:Number};
+        workspace::Union{ShearletWorkspace, Nothing} = nothing, threaded::Union{Bool, Nothing} = nothing
     )
     _check_host(workspace, x)
     Td = data_eltype(x)
@@ -127,28 +159,29 @@ function shearlet_forward(
 end
 
 """
-    shearlet_inverse(coeffs, system::ShearletSystem; workspace = nothing, threaded = nothing) -> Array
+    synthesize(system::ShearletSystem, c; workspace = nothing, threaded = nothing) -> AbstractArray
 
-Invert [`shearlet_forward`](@ref).  For a Parseval system such as
-[`BandlimitedShearlets`](@ref) this is also the adjoint of the forward
-transform.
+Invert [`analyze`](@ref analyze(::ShearletSystem, ::AbstractArray{<:Number})): the array of
+size `size(c)[1:end-1]` and element type `float(eltype(c))` whose transform is
+`c`.  For a Parseval system such as [`BandlimitedShearlets`](@ref) this is
+also the adjoint of the forward transform; the others are dual frames.
 """
-function shearlet_inverse(
-        coeffs::AbstractArray{<:Number}, sys::ShearletSystem;
+function MultiscaleTransformsBase.synthesize(
+        sys::ShearletSystem, coeffs::AbstractArray{<:Number};
         workspace::Union{ShearletWorkspace, Nothing} = nothing, threaded::Union{Bool, Nothing} = nothing
     )
-    N = ndims(coeffs) - 1
-    x = similar(coeffs, data_eltype(coeffs), ntuple(d -> size(coeffs, d), N))
-    return shearlet_inverse!(x, coeffs, sys; workspace = workspace, threaded = threaded)
+    x = similar(coeffs, data_eltype(coeffs), signal_size(sys, coeffs))
+    return synthesize!(x, sys, coeffs; workspace, threaded)
 end
 
 """
-    shearlet_inverse!(x, coeffs, system::ShearletSystem; workspace = nothing, threaded = nothing) -> x
+    synthesize!(x, system::ShearletSystem, c; workspace = nothing, threaded = nothing) -> x
 
-In-place [`shearlet_inverse`](@ref).
+In-place [`synthesize`](@ref synthesize(::ShearletSystem, ::AbstractArray{<:Number})).
+With a `workspace` and `threaded = false` it allocates nothing.
 """
-function shearlet_inverse!(
-        x::AbstractArray{<:Number}, coeffs::AbstractArray{<:Number}, sys::ShearletSystem;
+function MultiscaleTransformsBase.synthesize!(
+        x::AbstractArray{<:Number}, sys::ShearletSystem, coeffs::AbstractArray{<:Number};
         workspace::Union{ShearletWorkspace, Nothing} = nothing, threaded::Union{Bool, Nothing} = nothing
     )
     _check_host(workspace, x)
@@ -162,20 +195,18 @@ function shearlet_inverse!(
 end
 
 """
-    shearlet_inverse(f, system::ShearletSystem, dims; T = Float64, workspace = nothing) -> Array
+    synthesize!(f, x, system::ShearletSystem; workspace = nothing, threaded = nothing) -> x
 
-Streaming inverse: `f(i)` must return subband `i` (in `shearlet_layout` order)
-as an array of size `dims`.  The subbands are consumed one at a time, from the
-calling task.
+Streaming inverse into `x`: `f(i)` must return subband `i` (in
+`subband_layout` order) as an array of size `size(x)`.  The subbands are
+consumed one at a time, from the calling task, whatever `threaded` says.
 """
-function shearlet_inverse(
-        f, sys::ShearletSystem, dims::Tuple; T::Type{<:Number} = Float64,
-        workspace::Union{ShearletWorkspace, Nothing} = nothing
+function MultiscaleTransformsBase.synthesize!(
+        f, x::AbstractArray{<:Number}, sys::ShearletSystem;
+        workspace::Union{ShearletWorkspace, Nothing} = nothing, threaded::Union{Bool, Nothing} = nothing
     )
-    Td = float(T)
-    ws = _workspace(workspace, sys, Tuple(dims), Td, false)
-    # On the workspace's device.
-    x = similar(ws.rbufs[1][1], Td, ws.dims)
+    _check_host(workspace, x)
+    ws = _workspace(workspace, sys, size(x), data_eltype(x), false)
     _chunked_synthesis(ws) || return _engine_inverse!(f, x, ws, false)
     function stage(r)
         for (j, i) in enumerate(r)
@@ -193,7 +224,7 @@ end
     shearlet_spectra(system, dims; T = Float64, synthesis = false) -> Array{T}
 
 The frequency responses of all subbands of `system` on the full, unshifted DFT
-grid of a `dims` array: an array of size `(dims..., n)`, in `shearlet_layout`
+grid of a `dims` array: an array of size `(dims..., n)`, in `subband_layout`
 order.  Subband `i` of `x` is `real(ifft(spectra[.., i] .* fft(x)))`.
 
 With `synthesis = true`, the masks the inverse applies instead: `x` is

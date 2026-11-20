@@ -15,13 +15,13 @@ end
     for smooth in (false, true), dims in ((64, 64), (63, 64), (65, 47), (128, 96), (7, 9))
         sys = BandlimitedShearlets(smooth = smooth)
         S = shearlet_spectra(sys, dims)
-        @test size(S) == (dims..., shearlet_nsubbands(sys, dims))
+        @test size(S) == (dims..., nsubbands(sys, dims))
         @test maximum(abs, sum(abs2, S; dims = 3) .- 1) < 1.0e-12
         x = randn(Xoshiro(42), dims...)
-        c = shearlet_forward(x, sys)
+        c = analyze(sys, x)
         @test eltype(c) == Float64
         @test sum(abs2, c) ≈ sum(abs2, x) rtol = 1.0e-12
-        @test shearlet_inverse(c, sys) ≈ x atol = 1.0e-12
+        @test synthesize(sys, c) ≈ x atol = 1.0e-12
     end
 end
 
@@ -33,12 +33,12 @@ end
     S = shearlet_spectra(sys, dims)
     dense = ifft(S .* fft(x, (1, 2)), (1, 2))
     @test maximum(abs ∘ imag, dense) < 1.0e-14   # point-symmetric masks: real subbands
-    @test shearlet_forward(x, sys) ≈ real.(dense) atol = 1.0e-13
+    @test analyze(sys, x) ≈ real.(dense) atol = 1.0e-13
 end
 
 @testitem "Band-limited shearlets: layout" tags = [:bandlimited] begin
     sys = BandlimitedShearlets(scales = 3)
-    L = shearlet_layout(sys, (128, 128))
+    L = subband_layout(sys, (128, 128))
     @test length(L) == 2^(3 + 2) - 3            # 1 + Σⱼ 2^(j+1)
     @test islowpass(L[1]) && count(islowpass, L) == 1
     for j in 1:3
@@ -46,20 +46,20 @@ end
         @test count(i -> i.scale == j && i.cone == 1, L) == 2^j + 1   # seam shearlets listed here
     end
     @test issorted(L; by = i -> i.scale)
-    @test shearlet_nsubbands(BandlimitedShearlets(), (256, 256)) == 61   # J = 4 by default
+    @test nsubbands(BandlimitedShearlets(), (256, 256)) == 61   # J = 4 by default
     @test_throws ArgumentError BandlimitedShearlets(scales = -1)
-    @test_throws ArgumentError shearlet_layout(sys, (8, 8, 8, 8))
+    @test_throws ArgumentError subband_layout(sys, (8, 8, 8, 8))
 end
 
 @testitem "ShearletIndex: show round-trips" tags = [:bandlimited, :compact] begin
     for (sys, dims) in ((BandlimitedShearlets(scales = 2), (32, 32)), (BandlimitedShearlets(scales = 2), (16, 16, 16)), (CompactShearlets(scales = 2), (32, 32)))
-        for i in shearlet_layout(sys, dims)
+        for i in subband_layout(sys, dims)
             s = repr(i)
             @test Core.eval(@__MODULE__, Meta.parse(s)) === i
             @test sprint(show, MIME("text/plain"), i) == s
         end
     end
-    @test repr(shearlet_layout(BandlimitedShearlets(), (8, 8))[1]) == "ShearletIndex(scale = 0, cone = 0, shear = (0,))"
+    @test repr(subband_layout(BandlimitedShearlets(), (8, 8))[1]) == "ShearletIndex(scale = 0, cone = 0, shear = (0,))"
     @test ShearletIndex(scale = 2, cone = 1, shear = (-1, 3)) === ShearletIndex{2}(2, 1, (-1, 3))
     @test ShearletIndex(scale = 1, cone = 2, shear = [0]) === ShearletIndex{1}(1, 2, (0,))
 end
@@ -70,14 +70,14 @@ end
     dims = (128, 128)
     for smooth in (false, true)
         sys = BandlimitedShearlets(scales = 3, smooth = smooth)
-        L = shearlet_layout(sys, dims)
+        L = subband_layout(sys, dims)
         # Scale 3 has 2^(3-1) = 4 shears per side; slope ω₂/ω₁ = -k/4 in cone 1.
         for (f, cone, k) in [
                 ((40, 0), 1, 0), ((40, 10), 1, -1), ((40, 20), 1, -2), ((40, -20), 1, 2),
                 ((40, 40), 1, -4), ((30, -30), 1, 4),
                 ((0, 40), 2, 0), ((20, 40), 2, -2), ((-20, 40), 2, 2),
             ]
-            c = shearlet_forward(wave(dims, f), sys)
+            c = analyze(sys, wave(dims, f))
             e = vec(sum(abs2, c; dims = (1, 2)))
             i = argmax(e)
             @test (L[i].scale, L[i].cone, L[i].shear[1]) == (3, cone, k)
@@ -91,7 +91,7 @@ end
     sys = BandlimitedShearlets(scales = 3)
     x = randn(Xoshiro(42), 64, 80)
     s = (5, -9)
-    @test maximum(abs, circshift(shearlet_forward(x, sys), (s..., 0)) - shearlet_forward(circshift(x, s), sys)) < 1.0e-10
+    @test maximum(abs, circshift(analyze(sys, x), (s..., 0)) - analyze(sys, circshift(x, s))) < 1.0e-10
 end
 
 @testitem "Band-limited shearlets: complex data and precision" tags = [:bandlimited] begin
@@ -100,16 +100,16 @@ end
     rng = Xoshiro(42)
     a, b = randn(rng, 48, 64), randn(rng, 48, 64)
     z = complex.(a, b)
-    cz = shearlet_forward(z, sys)
+    cz = analyze(sys, z)
     @test eltype(cz) == ComplexF64
-    @test cz == complex.(shearlet_forward(a, sys), shearlet_forward(b, sys))   # real-linear, bit for bit
-    @test shearlet_inverse(cz, sys) ≈ z atol = 1.0e-12
+    @test cz == complex.(analyze(sys, a), analyze(sys, b))   # real-linear, bit for bit
+    @test synthesize(sys, cz) ≈ z atol = 1.0e-12
     x32 = randn(rng, Float32, 48, 64)
-    c32 = shearlet_forward(x32, sys)
+    c32 = analyze(sys, x32)
     @test eltype(c32) == Float32
-    @test maximum(abs, shearlet_inverse(c32, sys) - x32) < 1.0e-5
+    @test maximum(abs, synthesize(sys, c32) - x32) < 1.0e-5
     # Integer input is transformed as floating point.
-    @test eltype(shearlet_forward(rand(rng, 0:9, 16, 16), sys)) == Float64
+    @test eltype(analyze(sys, rand(rng, 0:9, 16, 16))) == Float64
 end
 
 @testitem "Band-limited shearlets: workspace, in-place and streaming forms" tags = [:bandlimited, :workspace] begin
@@ -117,53 +117,57 @@ end
     sys = BandlimitedShearlets(scales = 3)
     dims = (96, 64)
     x = randn(Xoshiro(42), dims...)
-    ws = make_shearlet_workspace(Float64, dims, sys)
-    c = shearlet_forward(x, sys; workspace = ws)
-    @test c == shearlet_forward(x, sys)
+    ws = make_workspace(sys, Float64, dims)
+    c = analyze(sys, x; workspace = ws)
+    @test c == analyze(sys, x)
     for threaded in (false, true)
         c2 = similar(c)
-        shearlet_forward!(c2, x, sys; workspace = ws, threaded = threaded)
+        analyze!(c2, sys, x; workspace = ws, threaded = threaded)
         @test c2 == c
         y = similar(x)
-        shearlet_inverse!(y, c, sys; workspace = ws, threaded = threaded)
+        synthesize!(y, sys, c; workspace = ws, threaded = threaded)
         @test y ≈ x atol = 1.0e-12
     end
     # Streaming: the same subbands, one at a time.
     seen = Int[]
-    shearlet_forward(x, sys; workspace = ws) do i, band
+    analyze(sys, x; workspace = ws) do i, band
         push!(seen, i)
         @test band == selectdim(c, 3, i)
     end
     @test seen == 1:size(c, 3)
-    @test shearlet_inverse(i -> selectdim(c, 3, i), sys, dims; workspace = ws) ≈ x atol = 1.0e-12
+    @test synthesize!(i -> selectdim(c, 3, i), similar(x), sys; workspace = ws) ≈ x atol = 1.0e-12
     # A view as the output, and as the input.
     big = zeros(dims..., size(c, 3) + 1)
-    shearlet_forward!(view(big, :, :, 2:size(big, 3)), x, sys; workspace = ws)
+    analyze!(view(big, :, :, 2:size(big, 3)), sys, x; workspace = ws)
     @test view(big, :, :, 2:size(big, 3)) == c
-    @test shearlet_inverse(view(big, :, :, 2:size(big, 3)), sys) ≈ x atol = 1.0e-12
+    @test synthesize(sys, view(big, :, :, 2:size(big, 3))) ≈ x atol = 1.0e-12
     # A workspace that does not fit is refused.
-    @test_throws DimensionMismatch shearlet_forward(randn(64, 64), sys; workspace = ws)
-    @test_throws ArgumentError shearlet_forward(x, BandlimitedShearlets(scales = 2); workspace = ws)
-    @test_throws DimensionMismatch shearlet_forward!(zeros(dims..., 3), x, sys; workspace = ws)
-    @test_throws ArgumentError shearlet_forward(Float32.(x), sys; workspace = ws)
-    @test_throws ArgumentError shearlet_inverse!(similar(x), complex.(c), sys)
+    @test_throws DimensionMismatch analyze(sys, randn(64, 64); workspace = ws)
+    @test_throws ArgumentError analyze(BandlimitedShearlets(scales = 2), x; workspace = ws)
+    @test_throws DimensionMismatch analyze!(zeros(dims..., 3), sys, x; workspace = ws)
+    @test_throws ArgumentError analyze(sys, Float32.(x); workspace = ws)
+    @test_throws ArgumentError synthesize!(similar(x), sys, complex.(c))
     # Views and transposes of host arrays need no workspace.
-    @test shearlet_forward(view(hcat(x, x), :, 1:64), sys) ≈ shearlet_forward(x[:, 1:64], sys)
-    @test shearlet_forward(transpose(x), sys) ≈ shearlet_forward(permutedims(x), sys)
+    @test analyze(sys, view(hcat(x, x), :, 1:64)) ≈ analyze(sys, x[:, 1:64])
+    @test analyze(sys, transpose(x)) ≈ analyze(sys, permutedims(x))
     # Only 2-D and 3-D data.
-    @test_throws ArgumentError shearlet_forward(randn(4, 4, 4, 4), BandlimitedShearlets(scales = 1))
+    @test_throws ArgumentError analyze(BandlimitedShearlets(scales = 1), randn(4, 4, 4, 4))
 end
 
 @testitem "Band-limited shearlets: workspace paths do not allocate" tags = [:bandlimited, :workspace] begin
     using Random
     sys = BandlimitedShearlets(scales = 3)
     x = randn(Xoshiro(42), 64, 64)
-    ws = make_shearlet_workspace(Float64, size(x), sys)
-    c = shearlet_forward(x, sys; workspace = ws)
+    ws = make_workspace(sys, Float64, size(x))
+    c = analyze(sys, x; workspace = ws)
     y = similar(x)
-    fwd(c, x, sys, ws) = @allocated shearlet_forward!(c, x, sys; workspace = ws, threaded = false)
-    inv(y, c, sys, ws) = @allocated shearlet_inverse!(y, c, sys; workspace = ws, threaded = false)
-    fwd(c, x, sys, ws), inv(y, c, sys, ws)
+    fwd(c, x, sys, ws) = @allocated analyze!(c, sys, x; workspace = ws, threaded = false)
+    inv(y, c, sys, ws) = @allocated synthesize!(y, sys, c; workspace = ws, threaded = false)
+    fwd_ws(c, x, ws) = @allocated analyze!(c, ws, x; threaded = false)
+    inv_ws(y, c, ws) = @allocated synthesize!(y, ws, c; threaded = false)
+    fwd(c, x, sys, ws), inv(y, c, sys, ws), fwd_ws(c, x, ws), inv_ws(y, c, ws)
     @test fwd(c, x, sys, ws) == 0
     @test inv(y, c, sys, ws) == 0
+    @test fwd_ws(c, x, ws) == 0
+    @test inv_ws(y, c, ws) == 0
 end

@@ -6,10 +6,10 @@
                 NSSTShearlets(directions = [3], filter_size = 9),
             ), dims in ((64, 64), (63, 80))
         x = randn(Xoshiro(42), dims...)
-        c = shearlet_forward(x, sys)
-        @test size(c) == (dims..., shearlet_nsubbands(sys, dims))
+        c = analyze(sys, x)
+        @test size(c) == (dims..., nsubbands(sys, dims))
         @test eltype(c) == Float64
-        @test shearlet_inverse(c, sys) ≈ x atol = 1.0e-12
+        @test synthesize(sys, c) ≈ x atol = 1.0e-12
     end
 end
 
@@ -19,7 +19,7 @@ end
     A = shearlet_spectra(sys, dims)
     S = shearlet_spectra(sys, dims; synthesis = true)
     @test maximum(abs, sum(A .* S; dims = 3) .- 1) < 1.0e-12
-    L = shearlet_layout(sys, dims)
+    L = subband_layout(sys, dims)
     # The directional subbands of a scale share their synthesis mask.
     for j in 1:2
         idx = findall(i -> i.scale == j, L)
@@ -33,13 +33,13 @@ end
     dims = (128, 128)
     for fs in (nothing, 0)
         sys = NSSTShearlets(directions = [2, 3, 3], filter_size = fs)
-        L = shearlet_layout(sys, dims)
+        L = subband_layout(sys, dims)
         # 2^3 directions: s = 2 shears per side, slope ω₂/ω₁ = -k/2 in cone 1.
         for (f, cone, k) in [
                 ((40, 0), 1, 0), ((40, 20), 1, -1), ((40, -20), 1, 1), ((40, 40), 1, -2),
                 ((0, 40), 2, 0), ((20, 40), 2, -1), ((-20, 40), 2, 1),
             ]
-            c = shearlet_forward(wave(dims, f), sys)
+            c = analyze(sys, wave(dims, f))
             e = vec(sum(abs2, c; dims = (1, 2)))
             # The pyramid spreads a frequency over neighbouring scales; take the
             # direction that holds most energy, summed over scales.
@@ -55,9 +55,9 @@ end
     sys = NSSTShearlets(directions = [2, 3])
     rng = Xoshiro(42)
     x = randn(rng, 64, 48)
-    @test maximum(abs, circshift(shearlet_forward(x, sys), (3, -7, 0)) - shearlet_forward(circshift(x, (3, -7)), sys)) < 1.0e-10
+    @test maximum(abs, circshift(analyze(sys, x), (3, -7, 0)) - analyze(sys, circshift(x, (3, -7)))) < 1.0e-10
     b = randn(rng, 64, 48)
-    @test shearlet_forward(complex.(x, b), sys) == complex.(shearlet_forward(x, sys), shearlet_forward(b, sys))
+    @test analyze(sys, complex.(x, b)) == complex.(analyze(sys, x), analyze(sys, b))
 end
 
 @testitem "NSST: argument checks" tags = [:nsst] begin
@@ -73,7 +73,7 @@ end
     @test hash(NSSTShearlets(pyramid = other)) == hash(NSSTShearlets(pyramid = other))
     @test NSSTShearlets(pyramid = other) != NSSTShearlets()
     @test hash(CompactShearlets(scales = 1)) == hash(CompactShearlets(scales = 1))
-    @test_throws ArgumentError shearlet_layout(NSSTShearlets(), (8, 8, 8))
-    @test_throws ArgumentError shearlet_forward(randn(8, 8, 8), NSSTShearlets())
+    @test_throws ArgumentError subband_layout(NSSTShearlets(), (8, 8, 8))
+    @test_throws ArgumentError analyze(NSSTShearlets(), randn(8, 8, 8))
     @test_throws ArgumentError shearlet_spectra(NSSTShearlets(), (8, 8, 8))
 end

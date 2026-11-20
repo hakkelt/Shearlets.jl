@@ -12,6 +12,14 @@ MultiscaleFilterBanks.jl   (shared core: FilterPair, CDF97, à trous responses, 
         └── Shearlets.jl     (this package — 2-D and 3-D shearlets)
 ```
 
+Every transform package also implements the interface of
+`MultiscaleTransformsBase.jl` (transform objects, `analyze`/`synthesize`,
+`make_workspace`, `subband_layout`/`subband`) and re-exports its names. The
+shearlet systems subtype `AbstractMultiscaleTransform`; the test suite runs
+`MultiscaleTransformsBase.Testing.test_transform` on each. Define interface
+methods on Shearlets' own types only (`ShearletSystem`, `ShearletWorkspace`):
+a method on the abstract types would be ambiguous with the interface's fallbacks.
+
 Unlike the contourlet / surfacelet split, one package covers both dimensions:
 the cone-adapted construction is the same in 2-D and 3-D (two cones, three
 pyramids), with no lattice that only exists in the plane.
@@ -20,8 +28,8 @@ The surface shared with the core: `FilterPair`, `CDF97`, and the internals `data
 `loop_threaded`, `with_fftw_threads`, `upsample_filter`, `nsp_responses` (the NSST pyramid) and the
 chunking helpers `even_chunks`, `leading_slices` and `DEFAULT_CHUNK_SAMPLES`, imported in `src/Shearlets.jl`.
 
-**First checkout**: `MultiscaleFilterBanks.jl` is unregistered and expected as a
-sibling directory, wired in through `[sources]`. On Julia 1.10, which does not
+**First checkout**: `MultiscaleFilterBanks.jl` and `MultiscaleTransformsBase.jl` are
+unregistered and expected as sibling directories, wired in through `[sources]`. On Julia 1.10, which does not
 read `[sources]`, run `julia --project=. dev/bootstrap.jl` once instead.
 
 ## Commit Rules
@@ -38,7 +46,7 @@ input; a transform is one FFT, then per subband a masked product and an inverse
 FFT. The pieces:
 
 - `src/systems/*.jl` — one file per system. A system implements
-  `shearlet_layout(sys, dims)` and `_shearlet_masks(sys, dims, Tf) -> _MaskSet`;
+  `subband_layout(sys, dims)` and `_shearlet_masks(sys, dims, Tf) -> _MaskSet`;
   nothing else is system-specific.
 - `src/engine/masks.jl` — the mask kinds: `_SparseMask` (support indices,
   for band-limited masks), `_DenseMask` (FIR filters) and `_ProductMask`
@@ -53,15 +61,18 @@ FFT. The pieces:
   loops over subbands.
 - `src/engine/batched.jl` — the chunked path device workspaces take: a chunk of
   subbands per batched FFT, fused chunk masks, the default chunk size and
-  `tune_shearlet_workspace`.  Its code is generic, so host tests exercise it.
-- `src/transforms/shearlet.jl` — the public API.
-- `ext/ShearletsAdaptExt.jl` — the GPU path, `Adapt.adapt_structure` only.
+  its tuner (`make_workspace(sys, x; tune = true)`).  Its code is generic, so host tests exercise it.
+- `src/transforms/shearlet.jl` — the interface methods (`analyze`, `synthesize`,
+  the streaming forms, coefficient accessors) and `shearlet_spectra`.
+- `ext/ShearletsAdaptExt.jl` — the GPU path: `Adapt.adapt_structure` and the
+  device routing of `make_workspace(sys, x)`. Adapt is a dependency of
+  MultiscaleTransformsBase, so the extension always loads.
 
 ## Invariants
 
 - **Coefficients are one stacked array**, `(size(x)..., nsubbands)`, in
-  `shearlet_layout` order (lowpass first, scales coarse to fine). Slice with
-  `selectdim(c, ndims(c), i)`.
+  `subband_layout` order (lowpass first, scales coarse to fine). Slice with
+  `subband(sys, c, i)`, i.e. `selectdim(c, ndims(c), i)`.
 - **Shear convention is shared by all systems**: subband `(cone c, shear k)` sits
   at the frequencies with `ω_e / ω_c ≈ -k_e / s` (`s` shears per side). Plane-wave
   tests assert the index a wave lands in — perfect reconstruction says nothing
@@ -71,8 +82,8 @@ FFT. The pieces:
   masks, mean for the NSST's sum-to-one windows).
 - **Complex data are two real channels** through the same masks, so the
   transform is real-linear bit for bit: `T(a + ib) == T(a) + iT(b)`.
-- **Workspace paths allocate nothing**: `shearlet_forward!` / `shearlet_inverse!`
-  with a workspace and `threaded = false` are tested with `@allocated == 0`.
+- **Workspace paths allocate nothing**: `analyze!` / `synthesize!`
+  with a workspace (or the workspace-only forms) and `threaded = false` are tested with `@allocated == 0`.
   Linear indexing into a matrix view reshapes its parent and allocates — use the
   `bufs_v` vector aliases.
 - **No scalar indexing in the mask kernels** (`_mask_apply!`, `_mask_accumulate!`):

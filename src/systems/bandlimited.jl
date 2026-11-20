@@ -112,7 +112,7 @@ function _bl_scale_elements(::Val{N}, s::Int) where {N}
     return elements
 end
 
-function shearlet_layout(sys::BandlimitedShearlets, dims::NTuple{N, Int}) where {N}
+function MultiscaleTransformsBase.subband_layout(sys::BandlimitedShearlets, dims::NTuple{N, Int}) where {N}
     N in (2, 3) || throw(ArgumentError("band-limited shearlets support 2-D and 3-D data, got size $(dims)"))
     layout = [_lowpass_index(Val(N))]
     for j in 1:_nscales(sys, dims)
@@ -123,7 +123,7 @@ function shearlet_layout(sys::BandlimitedShearlets, dims::NTuple{N, Int}) where 
     return layout
 end
 
-shearlet_layout(::BandlimitedShearlets, dims::Tuple) =
+MultiscaleTransformsBase.subband_layout(::BandlimitedShearlets, dims::Tuple) =
     throw(ArgumentError("band-limited shearlets support 2-D and 3-D data, got size $(dims)"))
 
 # Radial windows and lowpass at ω (in the units above).

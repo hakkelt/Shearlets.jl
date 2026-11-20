@@ -5,6 +5,7 @@ Documenter = "e30172f5-a6a5-5a46-863b-614d45cd2de4"
 FFTW = "7a1cc6ca-52ef-59f5-83cd-3a7055c09341"
 ImageCore = "a09fc81d-aa75-5fe9-8630-4744c3626534"
 MultiscaleFilterBanks = "6efc46e8-ef8d-4233-93b5-7ad1cba20951"
+MultiscaleTransformsBase = "bb7a9938-a16c-4a85-ac5b-efa2b8f5fd01"
 Plots = "91a5bcdd-55d7-5caf-9e0b-520d859cae80"
 Printf = "de0858da-6303-5e67-8744-51eddeeeb8d7"
 Random = "9a3f8284-a2c9-5f02-9a11-845980a1fd5c"
@@ -14,6 +15,7 @@ TestImages = "5e47fb64-e119-507b-a336-dd2b206d9990"
 
 [sources]
 MultiscaleFilterBanks = {path = "../../MultiscaleFilterBanks"}
+MultiscaleTransformsBase = {path = "../../MultiscaleTransformsBase"}
 Shearlets = {path = ".."}
 
 [compat]
@@ -21,6 +23,7 @@ Documenter = "1"
 FFTW = "1"
 ImageCore = "0.10"
 MultiscaleFilterBanks = "0.2"
+MultiscaleTransformsBase = "0.1"
 Plots = "1"
 TestImages = "1"
 julia = "1.10"

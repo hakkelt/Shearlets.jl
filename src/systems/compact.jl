@@ -120,7 +120,7 @@ Base.:(==)(a::CompactShearlets, b::CompactShearlets) =
 Base.hash(a::CompactShearlets, h::UInt) =
     hash(a.scales, hash(a.shear_levels, hash(a.qmf, hash(a.fan, hash(CompactShearlets, h)))))
 
-function shearlet_layout(sys::CompactShearlets, dims::NTuple{N, Int}) where {N}
+function MultiscaleTransformsBase.subband_layout(sys::CompactShearlets, dims::NTuple{N, Int}) where {N}
     N in (2, 3) || throw(ArgumentError("compactly supported shearlets support 2-D and 3-D data, got size $(dims)"))
     layout = [_lowpass_index(Val(N))]
     for (ℓ, d) in enumerate(sys.shear_levels), cone in 1:N, kI in CartesianIndices(ntuple(_ -> -(2^d):(2^d), Val(N - 1)))
@@ -129,7 +129,7 @@ function shearlet_layout(sys::CompactShearlets, dims::NTuple{N, Int}) where {N}
     return layout
 end
 
-shearlet_layout(::CompactShearlets, dims::Tuple) =
+MultiscaleTransformsBase.subband_layout(::CompactShearlets, dims::Tuple) =
     throw(ArgumentError("compactly supported shearlets support 2-D and 3-D data, got size $(dims)"))
 
 # ── Centred filter algebra ────────────────────────────────────────────────────

@@ -29,9 +29,9 @@ end
     using Random
     for sys in (CompactShearlets(scales = 2), CompactShearlets(scales = 3, shear_levels = [0, 1, 2])), dims in ((64, 64), (63, 70))
         x = randn(Xoshiro(42), dims...)
-        c = shearlet_forward(x, sys)
-        @test size(c) == (dims..., shearlet_nsubbands(sys, dims))
-        @test shearlet_inverse(c, sys) ≈ x atol = 1.0e-12
+        c = analyze(sys, x)
+        @test size(c) == (dims..., nsubbands(sys, dims))
+        @test synthesize(sys, c) ≈ x atol = 1.0e-12
         A = shearlet_spectra(sys, dims)
         S = shearlet_spectra(sys, dims; synthesis = true)
         @test maximum(abs, sum(A .* S; dims = 3) .- 1) < 1.0e-12
@@ -42,7 +42,7 @@ end
 @testitem "Compact shearlets: layout" tags = [:compact] begin
     sys = CompactShearlets(scales = 4)
     @test sys.shear_levels == [1, 1, 2, 2]
-    L = shearlet_layout(sys, (128, 128))
+    L = subband_layout(sys, (128, 128))
     @test length(L) == 1 + 2 * (5 + 5 + 9 + 9)
     @test count(i -> i.scale == 3 && i.cone == 2, L) == 9
     @test_throws ArgumentError CompactShearlets(scales = 0)
@@ -56,13 +56,13 @@ end
     wave(dims, f) = [cospi(2 * (f[1] * (i - 1) / dims[1] + f[2] * (j - 1) / dims[2])) for i in 1:dims[1], j in 1:dims[2]]
     dims = (128, 128)
     sys = CompactShearlets(scales = 3)   # shear level 2 at scale 3: slope -k/4
-    ws = make_shearlet_workspace(Float64, dims, sys)
-    L = shearlet_layout(sys, dims)
+    ws = make_workspace(sys, Float64, dims)
+    L = subband_layout(sys, dims)
     for (f, cone, k) in [
             ((40, 0), 1, 0), ((40, 10), 1, -1), ((40, 20), 1, -2), ((40, -20), 1, 2),
             ((0, 40), 2, 0), ((20, 40), 2, -2), ((-20, 40), 2, 2),
         ]
-        c = shearlet_forward(wave(dims, f), sys; workspace = ws)
+        c = analyze(sys, wave(dims, f); workspace = ws)
         e = vec(sum(abs2, c; dims = (1, 2)))
         i = argmax(e)
         @test (L[i].scale, L[i].cone, L[i].shear[1]) == (3, cone, k)
@@ -75,6 +75,6 @@ end
     sys = CompactShearlets(scales = 2)
     rng = Xoshiro(42)
     x, b = randn(rng, 48, 64), randn(rng, 48, 64)
-    @test maximum(abs, circshift(shearlet_forward(x, sys), (4, 11, 0)) - shearlet_forward(circshift(x, (4, 11)), sys)) < 1.0e-10
-    @test shearlet_forward(complex.(x, b), sys) == complex.(shearlet_forward(x, sys), shearlet_forward(b, sys))
+    @test maximum(abs, circshift(analyze(sys, x), (4, 11, 0)) - analyze(sys, circshift(x, (4, 11)))) < 1.0e-10
+    @test analyze(sys, complex.(x, b)) == complex.(analyze(sys, x), analyze(sys, b))
 end

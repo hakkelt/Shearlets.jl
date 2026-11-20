@@ -22,24 +22,24 @@ end
     rng = Xoshiro(7)
     for (sys, dims) in ChunkCases.cases, T in (Float32, ComplexF32)
         x = ChunkCases.random_input(rng, T, dims)
-        ws = make_shearlet_workspace(T, dims, sys)
-        ref = shearlet_forward(x, sys; workspace = ws)
+        ws = make_workspace(sys, T, dims)
+        ref = analyze(sys, x; workspace = ws)
         n = size(ref, ndims(ref))
         # One chunk of all, uneven chunks, and chunks of one.
         for k in (n, 5, 1)
             wb = S._with_batch(ws, S._make_batch(ws, k))
             @test maximum(length, wb.batch.chunks) <= k
-            c = shearlet_forward(x, sys; workspace = wb)
+            c = analyze(sys, x; workspace = wb)
             @test maximum(abs, c .- ref) <= 1.0f-5 * maximum(abs, ref)
-            @test maximum(abs, shearlet_inverse(c, sys; workspace = wb) .- x) <= 1.0f-5 * maximum(abs, x)
+            @test maximum(abs, synthesize(sys, c; workspace = wb) .- x) <= 1.0f-5 * maximum(abs, x)
             @test (wb.batch.syn === nothing) == (sys isa NSSTShearlets)
         end
         # The streaming forms take the chunked path too.
         wb = S._with_batch(ws, S._make_batch(ws, 5))
         cs = similar(ref)
-        shearlet_forward((i, band) -> copyto!(selectdim(cs, ndims(cs), i), band), x, sys; workspace = wb)
+        analyze((i, band) -> copyto!(selectdim(cs, ndims(cs), i), band), sys, x; workspace = wb)
         @test maximum(abs, cs .- ref) <= 1.0f-5 * maximum(abs, ref)
-        y = shearlet_inverse(i -> selectdim(ref, ndims(ref), i), sys, dims; T = T, workspace = wb)
+        y = synthesize!(i -> selectdim(ref, ndims(ref), i), similar(x), sys; workspace = wb)
         @test maximum(abs, y .- x) <= 1.0f-5 * maximum(abs, x)
     end
 end
@@ -49,8 +49,8 @@ end
     const S = Shearlets
     sys, dims = CompactShearlets(scales = 2), (64, 64)
     x = randn(Xoshiro(3), Float32, dims...)
-    ws = make_shearlet_workspace(Float32, dims, sys)
-    ref = shearlet_forward(x, sys; workspace = ws)
+    ws = make_workspace(sys, Float32, dims)
+    ref = analyze(sys, x; workspace = ws)
     # The extension stacks the dense masks into one matrix, and the chunks are
     # views of it; it chunks device workspaces only.
     hw = Adapt.adapt(Array, ws)
@@ -59,10 +59,10 @@ end
     dw = S._with_batch(hw, S._make_batch(hw, S._default_chunk(hw)))
     @test parent(dw.batch.ana[1]) === parent(dw.masks.ana[1].val)
     @test dw.batch.syn === dw.batch.ana
-    @test shearlet_forward(x, sys; workspace = dw) ≈ ref
+    @test analyze(sys, x; workspace = dw) ≈ ref
     # Tuning keeps a chunked path or drops it, and the transform is the same.
     tw = S._tune_batch(dw; candidates = [1, 2, 8])
     sizes = [maximum(length, S.even_chunks(S._nsubbands(dw), k)) for k in (1, 2, 8)]
     @test S._chunk_size(tw.batch) in (sizes..., S._chunk_size(dw.batch))
-    @test shearlet_forward(x, sys; workspace = tw) ≈ ref
+    @test analyze(sys, x; workspace = tw) ≈ ref
 end

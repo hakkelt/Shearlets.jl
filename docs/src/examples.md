@@ -21,20 +21,20 @@ psnr(ref, x) = 10log10(255^2 / mean(abs2, x .- ref))
 ## The coefficient stack
 
 The coefficients of an `n₁ × n₂` image are one `n₁ × n₂ × η` array, a subband
-per slice in the order of `shearlet_layout`; every subband has the size of the
+per slice in the order of `subband_layout`; every subband has the size of the
 image. Häuser & Steidl's `simple_example` shows an image, its coefficients for
 one shearlet, that shearlet, and the reconstruction:
 
 ```@example ex
 x = Float64.(Gray.(testimage("cameraman")))
 sys = BandlimitedShearlets(scales = 4)
-c = shearlet_forward(x, sys)
-L = shearlet_layout(sys, size(x))
+c = analyze(sys, x)
+L = subband_layout(sys, size(x))
 i = findfirst(==(ShearletIndex{1}(3, 1, (-2,))), L)
 Ψ = shearlet_spectra(sys, size(x))
 ψ = fftshift(real(ifft(Ψ[:, :, i])))
 m = size(x, 1) ÷ 2 + 1
-xr = shearlet_inverse(c, sys)
+xr = synthesize(sys, c)
 plot(showimg(x; title = "original image"), showcoef(c[:, :, i]; title = "coefficients, scale 3, shear −2"),
     showcoef(ψ[(m - 24):(m + 24), (m - 24):(m + 24)]; title = "that shearlet (zoomed)"),
     showimg(xr; title = "reconstructed image"); layout = (2, 2), size = (700, 720))
@@ -66,8 +66,8 @@ for i in 1:n, j in 1:n
     shapes[i, j] = diamond || disc || half || square
 end
 sys = BandlimitedShearlets(scales = 4)
-c = shearlet_forward(shapes, sys)
-L = shearlet_layout(sys, size(shapes))
+c = analyze(sys, shapes)
+L = subband_layout(sys, size(shapes))
 fine = [i for (i, l) in enumerate(L) if l.scale == 3]
 pick(k) = findfirst(==(ShearletIndex{1}(3, 1, (k,))), L)
 plot(showimg(shapes; title = "shapes"),
@@ -129,8 +129,8 @@ for θ in 0:15:165
     wave = [cos(2π * (f₁ * i + f₂ * j) / n) for i in 0:(n - 1), j in 0:(n - 1)]
     @printf("%5d°  %-12s", θ, (f₁, f₂))
     for (_, sys) in systems
-        cw = shearlet_forward(wave, sys)
-        l = shearlet_layout(sys, (n, n))[argmax(vec(sum(abs2, cw; dims = (1, 2))))]
+        cw = analyze(sys, wave)
+        l = subband_layout(sys, (n, n))[argmax(vec(sum(abs2, cw; dims = (1, 2))))]
         @printf("  scale %d cone %d k = %-3d", l.scale, l.cone, l.shear[1])
     end
     println()
@@ -153,8 +153,8 @@ by the same amount, exactly:
 ```@example ex
 x = Float64.(Gray.(testimage("cameraman")))
 for (name, sys) in systems
-    c0 = shearlet_forward(x, sys)
-    cs = shearlet_forward(circshift(x, (5, -7)), sys)
+    c0 = analyze(sys, x)
+    cs = analyze(sys, circshift(x, (5, -7)))
     @printf("%-12s max |T(shift x) − shift(T x)| = %.1e\n", name, maximum(abs, cs .- circshift(c0, (5, -7, 0))))
 end
 ```
@@ -173,18 +173,18 @@ workspace holds each system's masks and FFT plans, so the forward and inverse
 transforms do not rebuild them:
 
 ```@example ex
-function denoise(noisy, sys, σ; ws = make_shearlet_workspace(Float64, size(noisy), sys))
-    L = shearlet_layout(sys, size(noisy))
+function denoise(noisy, sys, σ; ws = make_workspace(sys, Float64, size(noisy)))
+    L = subband_layout(sys, size(noisy))
     Ψ = shearlet_spectra(sys, size(noisy))
     J = maximum(l -> l.scale, L)
-    c = shearlet_forward(noisy, sys; workspace = ws)
+    c = analyze(sys, noisy; workspace = ws)
     for (i, l) in enumerate(L)
         islowpass(l) && continue
         λ = (l.scale == J ? 4 : 3) * σ * sqrt(mean(abs2, view(Ψ, :, :, i)))
         b = view(c, :, :, i)
         b .= ifelse.(abs.(b) .>= λ, b, 0.0)
     end
-    return shearlet_inverse(c, sys; workspace = ws)
+    return synthesize(sys, c; workspace = ws)
 end
 
 x = 255 .* Float64.(Gray.(testimage("cameraman")))
@@ -242,12 +242,12 @@ the unsheared finest-scale subbands of cones 1 and 3:
 n = 64
 ball = [Float64(hypot(i - 32, j - 32, k - 32) < 18) for i in 1:n, j in 1:n, k in 1:n]
 sys3 = BandlimitedShearlets(scales = 2)
-L3 = shearlet_layout(sys3, size(ball))
+L3 = subband_layout(sys3, size(ball))
 total = zeros(n, n, n)
 axis1 = findfirst(==(ShearletIndex{2}(2, 1, (0, 0))), L3)
 axis3 = findfirst(==(ShearletIndex{2}(2, 3, (0, 0))), L3)
 picked = Dict{Int, Array{Float64, 3}}()
-shearlet_forward(ball, sys3) do i, band
+analyze(sys3, ball) do i, band
     L3[i].scale == 2 && (total .+= abs.(band))
     i in (axis1, axis3) && (picked[i] = copy(band))
 end

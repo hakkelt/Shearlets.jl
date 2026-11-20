@@ -24,9 +24,9 @@ using Shearlets
 
 x = randn(256, 256)
 sys = BandlimitedShearlets(scales = 4)        # FFST, a Parseval frame
-c = shearlet_forward(x, sys)                  # 256 × 256 × 61
-shearlet_layout(sys, size(x))[10]             # ShearletIndex(scale = 2, cone = 1, shear = (2,))
-x ≈ shearlet_inverse(c, sys)                  # true
+c = analyze(sys, x)                           # 256 × 256 × 61
+subband_layout(sys, size(x))[10]              # ShearletIndex(scale = 2, cone = 1, shear = (2,))
+x ≈ synthesize(sys, c)                        # true
 ```
 
 ## Installation
@@ -54,15 +54,16 @@ papers' experiments.
 ## Repeated transforms and multithreading
 
 ```julia
-ws = make_shearlet_workspace(Float32, size(x), sys)   # masks, FFT plans, buffers
-c = similar(x, Float32, size(x)..., shearlet_nsubbands(sys, size(x)))
-shearlet_forward!(c, x, sys; workspace = ws)          # allocation-free
-shearlet_inverse!(x, c, sys; workspace = ws)
+ws = make_workspace(sys, Float32, size(x))     # masks, FFT plans, buffers
+c = similar_coefficients(sys, x)
+analyze!(c, sys, x; workspace = ws)            # allocation-free
+analyze!(c, ws, x)                             # the same, from the workspace alone
+synthesize!(x, sys, c; workspace = ws)
 ```
 
 The subbands are computed in parallel over Julia's threads (start Julia with
 `-t auto`) unless `threaded = false`. For data too large to hold every subband,
-`shearlet_forward(f, x, sys)` streams them to `f(i, band)` one at a time.
+`analyze(f, sys, x)` streams them to `f(i, band)` one at a time.
 
 ## GPU
 
@@ -70,19 +71,20 @@ The transforms run on GPU backends with an FFT library: CUDA.jl (NVIDIA),
 AMDGPU.jl (AMD) and Metal.jl (Apple silicon, `Float32` only). The test suite
 runs on CUDA. OpenCL.jl is supported but much slower than the CPU, because it
 has no FFT: FFTW runs the FFTs on the CPU on `CLArray`s in shared virtual memory
-(OpenCL.jl's default on devices that support it). Load `Adapt` and move a
-workspace to the device:
+(OpenCL.jl's default on devices that support it). Build the workspace from
+device data (the Adapt extension, loaded with the interface, moves it there):
 
 ```julia
-using CUDA, Adapt
-ws = Adapt.adapt(CuArray, make_shearlet_workspace(Float32, size(x), sys))
-c = shearlet_forward(CuArray(x), sys; workspace = ws)
+using CUDA
+xg = CuArray(x)
+ws = make_workspace(sys, xg)
+c = analyze(sys, xg; workspace = ws)
 ```
 
 On the device the subbands are transformed in chunks, one batched FFT per chunk,
 which keeps small grids from being bound by kernel launches; the chunk size
-follows from the grid size. `tune_shearlet_workspace(ws)` measures the fastest
-chunk size on the device instead, in a fraction of a second once compiled.
+follows from the grid size. `make_workspace(sys, xg; tune = true)` measures the
+fastest chunk size on the device instead, in a fraction of a second once compiled.
 The chunks' stacks and batched FFT plans take up to about 80 MB of device
 memory on top of the coefficients; grids too large to chunk, such as 128³, are
 transformed one subband at a time.
@@ -93,7 +95,11 @@ transformed one subband at a time.
 and [Surfacelets.jl](https://github.com/hakkelt/Surfacelets.jl) (3-D surfacelets)
 are multidirectional transforms of the same family. All three are built on
 [MultiscaleFilterBanks.jl](https://github.com/hakkelt/MultiscaleFilterBanks.jl),
-whose `FilterPair` and `CDF97` are re-exported here.
+whose `FilterPair` and `CDF97` are re-exported here, and implement the common
+interface of
+[MultiscaleTransformsBase.jl](https://github.com/hakkelt/MultiscaleTransformsBase.jl)
+(`analyze`, `synthesize`, `make_workspace`, `subband_layout`, ...), whose names
+are re-exported too.
 
 ## Development
 
@@ -102,8 +108,8 @@ julia --project=test test/runtests.jl          # all tests
 julia --project=docs docs/make.jl              # build the documentation
 ```
 
-To work against a local checkout of MultiscaleFilterBanks.jl, put it next to
-this one (`../MultiscaleFilterBanks`); on Julia 1.10 run
+MultiscaleFilterBanks.jl and MultiscaleTransformsBase.jl are expected as sibling
+checkouts (`../MultiscaleFilterBanks`, `../MultiscaleTransformsBase`); on Julia 1.10 run
 `julia --project=. dev/bootstrap.jl` once.
 
 ## Disclaimer

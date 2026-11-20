@@ -8,11 +8,14 @@ the DFT grid.
 
 | Function | Description |
 |----------|-------------|
-| `shearlet_forward` / `shearlet_inverse` | Transform and its inverse; a streaming form of each |
-| `make_shearlet_workspace` | Masks, plans and buffers for repeated transforms |
-| `tune_shearlet_workspace` | Measure the fastest chunk size of a device workspace |
-| `shearlet_layout` / `shearlet_nsubbands` | What each subband is |
+| `analyze` / `synthesize` (and `!` forms) | Transform and its inverse; a streaming form of each |
+| `make_workspace` | Masks, plans and buffers for repeated transforms |
+| `subband_layout` / `nsubbands` / `subband` | What each subband is, and where it is in the coefficients |
 | `shearlet_spectra` | The frequency responses, for inspection |
+
+The verbs and accessors are those of
+[MultiscaleTransformsBase](https://github.com/hakkelt/MultiscaleTransformsBase.jl),
+re-exported here; every shearlet system is an `AbstractMultiscaleTransform`.
 
 Shearlet systems:
 
@@ -32,6 +35,10 @@ module Shearlets
 using FFTW: FFTW, plan_rfft, plan_brfft
 using LinearAlgebra: mul!
 using FastBroadcast: @..
+
+using MultiscaleTransformsBase: MultiscaleTransformsBase, AbstractMultiscaleTransform, AbstractTransformWorkspace,
+    analyze, analyze!, synthesize, synthesize!, make_workspace, transform, similar_coefficients,
+    subband_layout, nsubbands, subband, SubbandVector, SubbandLayout, check_workspace, signal_size
 
 using MultiscaleFilterBanks: MultiscaleFilterBanks,
     FilterPair, CDF97, upsample_filter,
@@ -60,12 +67,16 @@ export
     # Re-exported from MultiscaleFilterBanks
     FilterPair, CDF97,
 
+    # Re-exported from MultiscaleTransformsBase
+    AbstractMultiscaleTransform, AbstractTransformWorkspace,
+    analyze, analyze!, synthesize, synthesize!, make_workspace, transform, similar_coefficients,
+    subband_layout, nsubbands, subband, SubbandVector, SubbandLayout,
+
     # Systems and indexing
     ShearletSystem, BandlimitedShearlets, NSSTShearlets, CompactShearlets, ShearletIndex, islowpass,
-    shearlet_layout, shearlet_nsubbands, shearlet_spectra,
+    shearlet_spectra,
 
     # Transforms
-    ShearletWorkspace, make_shearlet_workspace, tune_shearlet_workspace,
-    shearlet_forward, shearlet_forward!, shearlet_inverse, shearlet_inverse!
+    ShearletWorkspace
 
 end # module

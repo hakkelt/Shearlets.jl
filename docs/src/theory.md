@@ -49,7 +49,7 @@ end
 # The half-maximum contour of |ψ̂|² of every subband, coloured by scale: the
 # essential supports, for systems whose masks overlap.
 function covering(sys, n; kw...)
-    L = shearlet_layout(sys, (n, n)); Ψ = shearlet_spectra(sys, (n, n))
+    L = subband_layout(sys, (n, n)); Ψ = shearlet_spectra(sys, (n, n))
     p = plot(; aspect_ratio = :equal, legend = false, xlims = (-n / 2, n / 2), ylims = (-n / 2, n / 2),
         xlabel = "ω₁", ylabel = "ω₂", kw...)
     for (i, l) in enumerate(L)
@@ -133,7 +133,7 @@ On the DFT grid each filter is a real, point-symmetric mask, and the transform
 is one FFT, then a masked product and an inverse FFT per subband. The systems
 differ in how the masks are built and what frame they form.
 
-`shearlet_layout(system, size(x))` lists the subbands in the order the
+`subband_layout(system, size(x))` lists the subbands in the order the
 coefficients stack them. A [`ShearletIndex`](@ref) has a `scale` (0 for the
 lowpass, then coarse to fine), a `cone` (the axis the subband's frequencies are
 largest along) and a `shear` per remaining axis. All systems share the shear
@@ -142,12 +142,12 @@ collects the frequencies with ``\omega_e / \omega_c \approx -k_e / s``.
 
 The left panel colours every frequency of a two-scale band-limited system by
 the region it belongs to; the right one by the subband with the largest
-response there, labelled with its position in `shearlet_layout` (compare
+response there, labelled with its position in `subband_layout` (compare
 Häuser & Steidl, Figs. 5 and 11):
 
 ```@example theory
 sys = BandlimitedShearlets(scales = 2)
-L = shearlet_layout(sys, (128, 128))
+L = subband_layout(sys, (128, 128))
 region(l) = islowpass(l) ? 0 : abs(l.shear[1]) == 2^(l.scale - 1) ? 3 : l.cone
 own = owner_map(sys, 128)
 regions = map(i -> region(L[i]), own)
@@ -194,7 +194,7 @@ line is the root sum of their squares:
 ```@example theory
 n = 256
 sys = BandlimitedShearlets(scales = 3)
-L = shearlet_layout(sys, (n, n)); Ψ = shearlet_spectra(sys, (n, n))
+L = subband_layout(sys, (n, n)); Ψ = shearlet_spectra(sys, (n, n))
 unsheared = [findfirst(==(ShearletIndex{1}(j, 1, (0,))), L) for j in 1:3]
 r = 2:(n ÷ 2)                                   # ω₁ = 1, …, n/2 − 1 on ω₂ = 0
 p1 = plot(r .- 1, Ψ[r, 1, 1]; label = "lowpass", lw = 2, xscale = :log2,
@@ -250,7 +250,7 @@ two numbers here:
 ```@example theory
 tight = dropdims(sum(abs2, Ψ; dims = 3); dims = 3) .- 1
 x = randn(n, n)
-roundtrip = shearlet_inverse(shearlet_forward(x, sys), sys) .- x
+roundtrip = synthesize(sys, analyze(sys, x)) .- x
 p1 = heatmap(bins(n), bins(n), centred(tight); color = :RdBu, clims = (-1, 1) .* 1e-14,
     aspect_ratio = :equal, title = "Σ ψ̂² − 1", xlabel = "ω₁", ylabel = "ω₂")
 p2 = heatmap(roundtrip; color = :RdBu, clims = (-1, 1) .* 1e-14, aspect_ratio = :equal,
@@ -266,7 +266,7 @@ The number of subbands is ``1 + \sum_{j=1}^{J} 4 \cdot 2^{j-1} = 2^{J+2} - 3``,
 the redundancy of the transform:
 
 ```@example theory
-[(J, shearlet_nsubbands(BandlimitedShearlets(scales = J), (512, 512))) for J in 1:4]
+[(J, nsubbands(BandlimitedShearlets(scales = J), (512, 512))) for J in 1:4]
 ```
 
 ### Smooth seam elements
@@ -288,7 +288,7 @@ ps = []
 for smooth in (false, true)
     s = BandlimitedShearlets(scales = 3; smooth)
     Ψs = shearlet_spectra(s, (n, n))
-    seam = findfirst(==(ShearletIndex{1}(2, 1, (2,))), shearlet_layout(s, (n, n)))
+    seam = findfirst(==(ShearletIndex{1}(2, 1, (2,))), subband_layout(s, (n, n)))
     name = smooth ? "smooth" : "Meyer"
     ψs = element(Ψs, seam, n ÷ 2 - 1)
     push!(ps, plot_freq(Ψs, seam; title = "$name seam shearlet, ψ̂"))
@@ -323,8 +323,8 @@ subbands are listed under cone 1, so they are blue:
 
 ```@example theory
 plot([(sa = BandlimitedShearlets(scales = 3; alpha);
-        cone_map(owner_map(sa, 256), shearlet_layout(sa, (256, 256));
-            title = "α = $alpha  ($(shearlet_nsubbands(sa, (256, 256))) subbands)"))
+        cone_map(owner_map(sa, 256), subband_layout(sa, (256, 256));
+            title = "α = $alpha  ($(nsubbands(sa, (256, 256))) subbands)"))
     for alpha in (2, 1, 0)]...; layout = (1, 3), size = (900, 310))
 savefig("bl_alpha.png"); nothing # hide
 ```
@@ -352,7 +352,7 @@ pyramid it belongs to:
 ```@example theory
 n3 = 64
 sys3 = BandlimitedShearlets(scales = 2)
-L3 = shearlet_layout(sys3, (n3, n3, n3))
+L3 = subband_layout(sys3, (n3, n3, n3))
 Ψ3 = shearlet_spectra(sys3, (n3, n3, n3))
 own3 = [argmax(view(Ψ3, i, j, k, :)) for i in 1:n3, j in 1:n3, k in 1:n3]
 plot(cone_map(centred(own3[:, :, 1]), L3; title = "ω₃ = 0"),
@@ -364,7 +364,7 @@ savefig("bl_3d.png"); nothing # hide
 ![](bl_3d.png)
 
 ```@example theory
-[count(l -> l.scale == j, shearlet_layout(BandlimitedShearlets(scales = 3), (64, 64, 64))) for j in 1:3]
+[count(l -> l.scale == j, subband_layout(BandlimitedShearlets(scales = 3), (64, 64, 64))) for j in 1:3]
 ```
 
 ### Relation to MATLAB's `shearletSystem`
@@ -421,7 +421,7 @@ frequency by its strongest subband would show a ragged picture:
 ```@example theory
 n = 256
 sysn = NSSTShearlets()
-Ln = shearlet_layout(sysn, (n, n)); Ψn = shearlet_spectra(sysn, (n, n))
+Ln = subband_layout(sysn, (n, n)); Ψn = shearlet_spectra(sysn, (n, n))
 p1 = covering(sysn, n; title = "all subbands")
 p2 = covering(sysn, n; title = "zoomed: scales 1 and 2", xlims = (-40, 40), ylims = (-40, 40))
 r = 1:(n ÷ 2)
@@ -450,7 +450,7 @@ ps = []
 for fs in (8, 32, 0)
     s = NSSTShearlets(filter_size = fs)
     Ψs = shearlet_spectra(s, (n, n))
-    sub = findfirst(==(ShearletIndex{1}(1, 1, (-1,))), shearlet_layout(s, (n, n)))
+    sub = findfirst(==(ShearletIndex{1}(1, 1, (-1,))), subband_layout(s, (n, n)))
     push!(ps, heatmap(bins(n), bins(n), centred(abs.(Ψs[:, :, sub])); color = :viridis,
         aspect_ratio = :equal, colorbar = false, xlims = (-48, 48), ylims = (-48, 48),
         title = fs == 0 ? "filter_size = 0 (DFT grid)" : "filter_size = $fs"))
@@ -522,7 +522,7 @@ side lobes that finite filters leave:
 
 ```@example theory
 n = 256
-Lc = shearlet_layout(sysc, (n, n)); Ψc = shearlet_spectra(sysc, (n, n))
+Lc = subband_layout(sysc, (n, n)); Ψc = shearlet_spectra(sysc, (n, n))
 J = sysc.scales
 picks = [ShearletIndex{1}(J, 1, (0,)), ShearletIndex{1}(J, 1, (-2,))]
 ps = []

@@ -41,7 +41,7 @@ the coarsest).  Every subband has the size of the input.
 - `pyramid`: the 1-D filter pair of the à trous pyramid; it must be symmetric
   with an odd number of taps.
 
-The frame is not tight: `shearlet_inverse` sums the directional subbands of each
+The frame is not tight: `synthesize` sums the directional subbands of each
 level and inverts the pyramid.
 
 # References
@@ -84,7 +84,7 @@ _nsst_shears(d::Int) = 2^(d - 2)
 
 # The shearlets of a scale are the band-limited system's 2-D ones: cone 1 with
 # k ∈ -s:s, cone 2 with k ∈ 1-s:s-1, the seam shearlets glued across the cones.
-function shearlet_layout(sys::NSSTShearlets, ::NTuple{2, Int})
+function MultiscaleTransformsBase.subband_layout(sys::NSSTShearlets, ::NTuple{2, Int})
     layout = [_lowpass_index(Val(2))]
     for (j, d) in enumerate(sys.directions), (c, k, _) in _bl_scale_elements(Val(2), _nsst_shears(d))
         push!(layout, ShearletIndex{1}(j, c, k))
@@ -92,7 +92,7 @@ function shearlet_layout(sys::NSSTShearlets, ::NTuple{2, Int})
     return layout
 end
 
-shearlet_layout(::NSSTShearlets, dims::Tuple) =
+MultiscaleTransformsBase.subband_layout(::NSSTShearlets, dims::Tuple) =
     throw(ArgumentError("the NSST supports 2-D data only, got size $(dims)"))
 
 # The shearing filters of one scale as masks on the `rfft` grid of `dims`

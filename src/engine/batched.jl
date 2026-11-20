@@ -270,27 +270,6 @@ function _chunk_candidates(ws::ShearletWorkspace)
 end
 
 """
-    tune_shearlet_workspace(workspace) -> ShearletWorkspace
-
-The device `workspace` (see [`make_shearlet_workspace`](@ref)) with the chunk
-size measured fastest on this device.  A device workspace transforms its
-subbands in chunks, one batched FFT per chunk; by default the chunk size follows
-from the grid size alone.  This times the workspace as it is, one subband at a
-time, and every chunk size worth trying, on a forward and an inverse transform
-each, and keeps the current setting unless another is 5% faster.  It takes a
-fraction of a second once compiled, and holds a coefficient array and the
-stacks of one more chunk size on the device meanwhile.  The transform itself is
-unchanged.
-
-```julia
-ws = tune_shearlet_workspace(Adapt.adapt(CuArray, make_shearlet_workspace(Float32, dims, system)))
-```
-
-A host workspace is returned unchanged: it threads over subbands instead.
-"""
-tune_shearlet_workspace(ws::ShearletWorkspace) = _on_host(ws.rbufs[1][1]) ? ws : _tune_batch(ws)
-
-"""
     _tune_batch(ws; candidates) -> ShearletWorkspace
 
 `ws` with the fastest of its own chunked path and those of the `candidates`

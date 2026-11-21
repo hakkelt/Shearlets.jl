@@ -35,6 +35,10 @@ end
             wd = make_workspace(sys, xg)
             @test wd.xbuf isa typeof(xg).name.wrapper
             @test maximum(abs, Array(analyze(wd, xg)) .- ref) < 1.0f-4 * maximum(abs, ref)
+            # `flags` and `tasks` are ignored on a device; `prewarm` runs there.
+            wp = make_workspace(sys, xg; flags = Shearlets.FFTW.ESTIMATE, tasks = 1, tune = false, prewarm = true)
+            @test wp.xbuf isa typeof(xg).name.wrapper
+            @test maximum(abs, Array(analyze(wp, xg)) .- ref) < 1.0f-4 * maximum(abs, ref)
             @test maximum(abs, Array(c) .- ref) < 1.0f-4 * maximum(abs, ref)
             @test maximum(abs, Array(synthesize(sys, c; workspace = ws)) .- x) < 1.0f-4 * maximum(abs, x)
             @test_throws ArgumentError analyze(sys, xg)

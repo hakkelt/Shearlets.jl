@@ -50,6 +50,63 @@ end
     @test isempty(Test.detect_ambiguities(Shearlets, MultiscaleTransformsBase))
 end
 
+@testitem "Workspace keywords: flags, tasks, tune, prewarm" tags = [:interface, :workspace] begin
+    using Random, Test
+    using Shearlets.FFTW: FFTW
+    rng = Xoshiro(13)
+    # Allocations of a call through a function, not at top level (globals).
+    allocs_analyze!(c, ws, x) = @allocated analyze!(c, ws, x; threaded = false)
+    for sys in (BandlimitedShearlets(scales = 2), NSSTShearlets(direction_levels = [2, 3]), CompactShearlets(scales = 2))
+        dims = (32, 40)
+        x = randn(rng, dims...)
+        ref = make_workspace(sys, Float64, dims; flags = FFTW.ESTIMATE)
+        c = analyze(ref, x)
+        y = synthesize(ref, c)
+        # `tasks` bounds the engine's tasks and their buffers, on both forms.
+        for w in (
+                make_workspace(sys, Float64, dims; flags = FFTW.ESTIMATE, tasks = 1),
+                make_workspace(sys, x; flags = FFTW.ESTIMATE, tasks = 1),
+            )
+            @test length(w.engine.buffers) == 1
+            @test analyze(w, x) == c
+            @test synthesize(w, c) ≈ y
+        end
+        w2 = make_workspace(sys, x; flags = FFTW.ESTIMATE, tasks = 2)
+        @test length(w2.engine.buffers) <= 2
+        @test analyze(w2, x) == c
+        Threads.nthreads() > 1 && @test length(ref.engine.buffers) > 1
+        @test_throws "tasks must be at least 1" make_workspace(sys, Float64, dims; tasks = 0)
+        @test_throws "tasks must be at least 1" make_workspace(sys, x; tasks = 0)
+        # `flags` reaches the FFT plans (`FFTW.MEASURE` is 0; its plan comes
+        # last, since its wisdom can change the later `ESTIMATE` plans' rounding).
+        @test ref.engine.pfwd.flags & FFTW.ESTIMATE != 0
+        # `tune` is accepted and ignored on the host.
+        for w in (
+                make_workspace(sys, Float64, dims; flags = FFTW.ESTIMATE, tune = true),
+                make_workspace(sys, x; flags = FFTW.ESTIMATE, tune = true),
+            )
+            @test w.engine.batch === nothing
+            @test analyze(w, x) ≈ c
+        end
+        # `prewarm`: the workspace gives the same results, and its first call
+        # allocates nothing.
+        for w in (
+                make_workspace(sys, Float64, dims; flags = FFTW.ESTIMATE, prewarm = true),
+                make_workspace(sys, x; flags = FFTW.ESTIMATE, tasks = 1, prewarm = true),
+            )
+            cw = similar(c)
+            @test allocs_analyze!(cw, w, x) == 0
+            @test cw ≈ c
+            @test synthesize(w, c) ≈ y
+        end
+        wm = make_workspace(sys, x; tasks = 1)
+        @test wm.engine.pfwd.flags & FFTW.ESTIMATE == 0
+        # Unknown keywords throw.
+        @test_throws MethodError make_workspace(sys, Float64, dims; threads = 2)
+        @test_throws MethodError make_workspace(sys, x; threads = 2)
+    end
+end
+
 @testitem "Systems: show prints a keyword call" tags = [:interface] begin
     using Random
     # The two-argument form parses back to an equal system.

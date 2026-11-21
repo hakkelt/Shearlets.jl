@@ -28,7 +28,8 @@ repeated calls out of the allocator, or call the verbs on the workspace alone
 system, `eltype(ws)` the data element type `Td` and `size(ws)` the data size.
 
 A workspace holds scratch buffers, so it must not serve two transforms at the
-same time; it threads internally instead.
+same time; it threads internally instead, over at most the `tasks` it was built
+with.
 """
 struct ShearletWorkspace{Td, Tf, N, S <: ShearletSystem, MS <: _MaskSet, E <: MaskBankEngine, B <: AbstractArray{Td, N}} <: AbstractTransformWorkspace
     system::S
@@ -55,21 +56,44 @@ _nsubbands(ws::ShearletWorkspace) = length(ws.engine.items)
 _threaded(threaded::Union{Bool, Nothing}) = loop_threaded(threaded !== false)
 
 """
-    make_workspace(system::ShearletSystem, T::Type{<:Number}, dims::Dims; flags = FFTW.MEASURE) -> ShearletWorkspace
+    make_workspace(system::ShearletSystem, T::Type{<:Number}, dims::Dims;
+                   flags = FFTW.MEASURE, tasks = nothing, tune = false, prewarm = false) -> ShearletWorkspace
 
 Build the masks, buffers and FFT plans of `system` for host data of element
 type `T` (real or complex; integers count as `float(T)`) and size `dims`.
-`flags` are the FFTW planner flags.  The workspace threads over the subbands.
+
+- `flags`: the FFTW planner flags of the FFT plans (an integer).
+- `tasks`: the most tasks a call with the workspace threads its subbands over,
+  each with its own FFT buffers; `nothing` is one per Julia thread, `1` a
+  serial workspace (whatever `threaded` a call passes).  At least 1.
+- `tune`: ignored (it tunes device workspaces; a host workspace threads over
+  subbands instead).
+- `prewarm`: run one analysis and one synthesis on zeros at construction, so
+  that the first call does not compile.  It costs a transform and, meanwhile,
+  a full coefficient array.  Off by default: a workspace's first call already
+  allocates no more than later calls, so prewarming only moves the one-time
+  compilation of a method from the first call to the construction.
 """
-function MultiscaleTransformsBase.make_workspace(sys::ShearletSystem, ::Type{T}, dims::Dims; flags::Integer = FFTW.MEASURE) where {T <: Number}
-    return _make_workspace(T, dims, sys, UInt32(flags), true)
+function MultiscaleTransformsBase.make_workspace(
+        sys::ShearletSystem, ::Type{T}, dims::Dims; flags::Integer = FFTW.MEASURE,
+        tasks::Union{Integer, Nothing} = nothing, tune::Bool = false, prewarm::Bool = false
+    ) where {T <: Number}
+    _check_tasks(tasks)
+    ws = _make_workspace(T, dims, sys, UInt32(flags), tasks)
+    prewarm && _prewarm(ws)
+    return ws
 end
 
+_check_tasks(tasks) =
+    tasks === nothing || tasks >= 1 || throw(ArgumentError("tasks must be at least 1 (or nothing), got $(tasks)"))
+
 """
-    make_workspace(system::ShearletSystem, x::AbstractArray; flags = FFTW.MEASURE, tune = false) -> ShearletWorkspace
+    make_workspace(system::ShearletSystem, x::AbstractArray;
+                   flags = FFTW.MEASURE, tasks = nothing, tune = false, prewarm = false) -> ShearletWorkspace
 
 The workspace of `system` for data like `x`: its element type, size and
-device.  For a host array this is `make_workspace(system, eltype(x), size(x); flags)`.
+device.  For a host array this is
+`make_workspace(system, eltype(x), size(x); flags, tasks, tune, prewarm)`.
 
 For a device array (a `CuArray`, say) the masks are built on the host and
 moved to the device by the Adapt extension; the FFT plans are the device FFT
@@ -89,23 +113,37 @@ chunking already measures best, and tuning only adds 0.1–4.4 s to the
 construction.  On the host `tune` does nothing: a host workspace threads
 over subbands instead.
 
+On a device `flags` and `tasks` are ignored (`tasks` is still checked to be at
+least 1): the device FFT library plans the FFTs, and the device engine runs in
+one task.  `prewarm = true` runs one analysis and one synthesis on zeros on the
+device, after the tuning.
+
 ```julia
 ws = make_workspace(system, CuArray{Float32}(undef, 256, 256); tune = true)
 ```
 """
-function MultiscaleTransformsBase.make_workspace(sys::ShearletSystem, x::AbstractArray; flags::Integer = FFTW.MEASURE, tune::Bool = false)
-    ws = make_workspace(sys, eltype(x), size(x); flags)
-    _on_host(x) && return ws
+function MultiscaleTransformsBase.make_workspace(
+        sys::ShearletSystem, x::AbstractArray; flags::Integer = FFTW.MEASURE,
+        tasks::Union{Integer, Nothing} = nothing, tune::Bool = false, prewarm::Bool = false
+    )
+    _on_host(x) && return make_workspace(sys, eltype(x), size(x); flags, tasks, tune, prewarm)
+    _check_tasks(tasks)
+    # The device engine is rebuilt from the host workspace's masks, so its host
+    # plans and buffers are made as cheaply as possible.
+    ws = _make_workspace(eltype(x), size(x), sys, FFTW.ESTIMATE, 1)
     dws = _to_device(ws, x)
-    return tune ? _tune(dws) : dws
+    dws = tune ? _tune(dws) : dws
+    prewarm && _prewarm(dws)
+    return dws
 end
 
 # `ws` moved to the device of `x`; a method of the Adapt extension.
 _to_device(ws, x) =
     throw(ArgumentError("a workspace for $(typeof(x)) data needs the Adapt extension: load Adapt"))
 
-# A host workspace, threading over the subbands when `threaded`.
-function _make_workspace(::Type{T}, dims::NTuple{N, Int}, sys::ShearletSystem, flags::UInt32, threaded::Bool) where {T, N}
+# A host workspace, threading over the subbands in at most `tasks` tasks
+# (`nothing`: one per thread).
+function _make_workspace(::Type{T}, dims::NTuple{N, Int}, sys::ShearletSystem, flags::UInt32, tasks::Union{Integer, Nothing}) where {T, N}
     Td = float(T)
     Tf = real(Td)
     masks = _system_masks(sys, dims, Tf)
@@ -113,7 +151,7 @@ function _make_workspace(::Type{T}, dims::NTuple{N, Int}, sys::ShearletSystem, f
     # aligned only when a slice is a multiple of 16 bytes; else they are planned
     # for any alignment (`UNALIGNED` is a little slower).
     aligned = prod(dims) * sizeof(Tf) % 16 == 0
-    engine = _engine(masks, Td, zeros(Tf, dims), _host_plans(flags, aligned); tasks = threaded ? nothing : 1)
+    engine = _engine(masks, Td, zeros(Tf, dims), _host_plans(flags, aligned); tasks)
     return ShearletWorkspace{Td}(sys, dims, masks, engine, aligned, zeros(Td, dims), zeros(Td, dims))
 end
 
@@ -181,7 +219,7 @@ end
 # The workspace for one call: `workspace` after checking it fits, else a new one.
 function _workspace(workspace, sys::ShearletSystem, dims::Tuple, ::Type{Td}, threaded::Bool) where {Td}
     if workspace === nothing
-        return _make_workspace(Td, Tuple(Int.(dims)), sys, FFTW.ESTIMATE, threaded)
+        return _make_workspace(Td, Tuple(Int.(dims)), sys, FFTW.ESTIMATE, threaded ? nothing : 1)
     end
     return check_workspace(workspace, sys, Td, dims)
 end
@@ -235,4 +273,18 @@ function _tune(ws::ShearletWorkspace{Td}) where {Td}
     finalize(x)
     finalize(c)
     return _with_engine(ws, engine)
+end
+
+# Run one analysis and one synthesis of `ws` on zeros, so that its first call
+# does not compile.
+function _prewarm(ws::ShearletWorkspace{Td}) where {Td}
+    x = _zeros_like(ws.xbuf, Td, ws.dims)
+    y = _zeros_like(ws.xbuf, Td, ws.dims)
+    c = _zeros_like(ws.xbuf, Td, (ws.dims..., _nsubbands(ws)))
+    analyze!(c, ws, x)
+    synthesize!(y, ws, c)
+    finalize(x)
+    finalize(y)
+    finalize(c)
+    return ws
 end

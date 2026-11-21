@@ -75,7 +75,7 @@ For a device array (a `CuArray`, say) the masks are built on the host and
 moved to the device by the Adapt extension; the FFT plans are the device FFT
 library's.  A device workspace transforms its subbands in chunks, one batched
 FFT per chunk, with a chunk size that by default follows from the grid size.
-`tune = true` measures instead (`MultiscaleFilterBanks.tune_mask_bank`): it
+`tune = true` measures instead (`MultiscaleFilterBanks.mask_bank_tune`): it
 times one subband at a time and chunks of powers of two subbands, each with the
 synthesis chunked or not, on a forward and an inverse transform, and keeps the
 default unless another is 5% faster.  Tuning holds a coefficient array and the
@@ -227,11 +227,11 @@ _direct_bands(ws::ShearletWorkspace{<:Complex}, coeffs::AbstractArray) = true
 _direct_bands(ws::ShearletWorkspace{<:Real}, coeffs::AbstractArray) = _plannable_bands(ws, coeffs)
 
 # A device workspace with the chunk length of its engine measured fastest
-# (`MultiscaleFilterBanks.tune_mask_bank`), on zeros.
+# (`MultiscaleFilterBanks.mask_bank_tune`), on zeros.
 function _tune(ws::ShearletWorkspace{Td}) where {Td}
     x = _zeros_like(ws.xbuf, Td, ws.dims)
     c = _zeros_like(ws.xbuf, Td, (ws.dims..., _nsubbands(ws)))
-    engine = tune_mask_bank(ws.engine, _Stack(c), x)
+    engine = mask_bank_tune(ws.engine, _Stack(c), x)
     finalize(x)
     finalize(c)
     return _with_engine(ws, engine)

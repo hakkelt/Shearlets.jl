@@ -26,7 +26,7 @@ pyramids), with no lattice that only exists in the plane.
 
 The surface shared with the core: `FilterPair`, `CDF97`, the mask-bank engine
 (`MaskBankEngine`, `MaskBank`, `MaskItem`, `SparseMask`, `IdentityMask`, the
-forward/inverse and streaming entry points, `tune_mask_bank`), and the internals
+forward/inverse and streaming entry points, `mask_bank_tune`), and the internals
 `data_eltype`, `loop_threaded`, `with_fftw_threads`, `nsp_responses` (the NSST
 pyramid) and `DEFAULT_CHUNK_SAMPLES`, imported in `src/Shearlets.jl`.
 

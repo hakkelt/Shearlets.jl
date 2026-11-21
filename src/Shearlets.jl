@@ -42,7 +42,7 @@ using MultiscaleFilterBanks: MultiscaleFilterBanks,
     FilterPair, CDF97, upsample_filter,
     data_eltype, loop_threaded, with_fftw_threads, nsp_responses, DEFAULT_CHUNK_SAMPLES,
     MaskBankEngine, MaskBank, MaskItem, SparseMask, IdentityMask, mask_apply!,
-    mask_bank_forward!, mask_bank_inverse!, mask_bank_stream_forward!, mask_bank_stream_inverse!, tune_mask_bank
+    mask_bank_forward!, mask_bank_inverse!, mask_bank_stream_forward!, mask_bank_stream_inverse!, mask_bank_tune
 
 # ── Types ─────────────────────────────────────────────────────────────────────
 include("types/index.jl")

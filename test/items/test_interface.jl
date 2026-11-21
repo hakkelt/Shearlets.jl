@@ -35,6 +35,9 @@ end
     @test ws isa AbstractTransformWorkspace
     @test transform(ws) == sys && size(ws) == size(x) && eltype(ws) == Float32
     @test eltype(make_workspace(sys, rand(Xoshiro(2), 0:9, 16, 16); flags = Shearlets.FFTW.ESTIMATE)) == Float64
+    # Any integer works as the FFTW flags (0 is `FFTW.MEASURE`).
+    @test eltype(make_workspace(sys, Float64, (16, 16); flags = 0)) == Float64
+    @test eltype(make_workspace(sys, zeros(16, 16); flags = Int(Shearlets.FFTW.ESTIMATE))) == Float64
     # Mismatched workspaces fail fast, with messages.
     @test_throws "built for element type Float32" analyze(sys, x; workspace = ws)
     @test_throws "built for data of size" analyze(sys, Float32.(x[:, 1:32]); workspace = ws)

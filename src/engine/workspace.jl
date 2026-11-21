@@ -61,8 +61,8 @@ Build the masks, buffers and FFT plans of `system` for host data of element
 type `T` (real or complex; integers count as `float(T)`) and size `dims`.
 `flags` are the FFTW planner flags.  The workspace threads over the subbands.
 """
-function MultiscaleTransformsBase.make_workspace(sys::ShearletSystem, ::Type{T}, dims::Dims; flags::UInt32 = FFTW.MEASURE) where {T <: Number}
-    return _make_workspace(T, dims, sys, flags, true)
+function MultiscaleTransformsBase.make_workspace(sys::ShearletSystem, ::Type{T}, dims::Dims; flags::Integer = FFTW.MEASURE) where {T <: Number}
+    return _make_workspace(T, dims, sys, UInt32(flags), true)
 end
 
 """
@@ -93,7 +93,7 @@ over subbands instead.
 ws = make_workspace(system, CuArray{Float32}(undef, 256, 256); tune = true)
 ```
 """
-function MultiscaleTransformsBase.make_workspace(sys::ShearletSystem, x::AbstractArray; flags::UInt32 = FFTW.MEASURE, tune::Bool = false)
+function MultiscaleTransformsBase.make_workspace(sys::ShearletSystem, x::AbstractArray; flags::Integer = FFTW.MEASURE, tune::Bool = false)
     ws = make_workspace(sys, eltype(x), size(x); flags)
     _on_host(x) && return ws
     dws = _to_device(ws, x)

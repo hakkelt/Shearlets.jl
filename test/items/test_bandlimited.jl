@@ -34,6 +34,11 @@ end
     dense = ifft(S .* fft(x, (1, 2)), (1, 2))
     @test maximum(abs ∘ imag, dense) < 1.0e-14   # point-symmetric masks: real subbands
     @test analyze(sys, x) ≈ real.(dense) atol = 1.0e-13
+    # The element type goes before the size; Float64 is the default.
+    @test shearlet_spectra(sys, Float64, dims) == S
+    S32 = shearlet_spectra(sys, Float32, Int32.(dims); synthesis = true)
+    @test eltype(S32) == Float32 && S32 ≈ shearlet_spectra(sys, dims; synthesis = true)
+    @test_throws MethodError shearlet_spectra(sys, dims; T = Float32)
 end
 
 @testitem "Band-limited shearlets: layout" tags = [:bandlimited] begin

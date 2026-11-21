@@ -221,17 +221,19 @@ function MultiscaleTransformsBase.synthesize!(
 end
 
 """
-    shearlet_spectra(system, dims; T = Float64, synthesis = false) -> Array{T}
+    shearlet_spectra(system, [T = Float64,] dims; synthesis = false) -> Array{T}
 
-The frequency responses of all subbands of `system` on the full, unshifted DFT
-grid of a `dims` array: an array of size `(dims..., n)`, in `subband_layout`
-order.  Subband `i` of `x` is `real(ifft(spectra[.., i] .* fft(x)))`.
+The frequency responses of all subbands of `system`, of the real element type
+`T`, on the full, unshifted DFT grid of a `dims` array: an array of size
+`(dims..., n)`, in `subband_layout` order.  Subband `i` of `x` is `real(ifft(spectra[.., i] .* fft(x)))`.
 
 With `synthesis = true`, the masks the inverse applies instead: `x` is
 `real(ifft(sum(spectra .* fft(subbands))))`.  For a Parseval system the two
 are equal.
 """
-function shearlet_spectra(sys::ShearletSystem, dims::Tuple; T::Type{<:AbstractFloat} = Float64, synthesis::Bool = false)
+shearlet_spectra(sys::ShearletSystem, dims::Tuple; synthesis::Bool = false) = shearlet_spectra(sys, Float64, dims; synthesis)
+
+function shearlet_spectra(sys::ShearletSystem, ::Type{T}, dims::Tuple; synthesis::Bool = false) where {T <: AbstractFloat}
     dims = Tuple(Int.(dims))
     N = length(dims)
     ms = _system_masks(sys, dims, T)

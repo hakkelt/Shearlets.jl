@@ -20,7 +20,7 @@
         @test_call target_modules = M subband_layout(sys, dims)
         @test_call target_modules = M nsubbands(sys, dims)
         @test_call target_modules = M shearlet_spectra(sys, dims)
-        @test_call target_modules = M shearlet_spectra(sys, dims; T = Float32, synthesis = true)
+        @test_call target_modules = M shearlet_spectra(sys, Float32, dims; synthesis = true)
 
         # ── Workspace + transforms ───────────────────────────────────────────
         @test_call target_modules = M make_workspace(sys, Float64, dims)

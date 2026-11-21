@@ -152,7 +152,7 @@ function _engine(
     bank, items, groups = _bank(masks, masks.groups)
     output = planner === nothing ? nothing : _zeros_like(rb, Td, dims)
     return MaskBankEngine(
-        [bank], items, X, pf, s * pb; groups, post = masks.post, pbwd = pb, scale = s,
+        [bank], items, X; pfwd = pf, pinv = s * pb, groups, post = masks.post, pbwd = pb, scale = s,
         split_complex = Td <: Complex, planner, forward_planner, output, chunk_samples, tasks
     )
 end

@@ -31,7 +31,7 @@
             )
         )
         chunked = MaskBankEngine(
-            e.banks, e.items, similar(e.X), e.pfwd, e.pinv; groups = e.pyramid_syn, post = e.post,
+            e.banks, e.items, similar(e.X); pfwd = e.pfwd, pinv = e.pinv, groups = e.pyramid_syn, post = e.post,
             pbwd = e.pbwd, scale = e.scale, split_complex = eltype(ws) <: Complex,
             planner, forward_planner = synthesis ? forward_planner : nothing, output,
             chunk_samples = k * length(e.X), tasks = 1

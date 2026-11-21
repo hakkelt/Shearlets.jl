@@ -49,7 +49,7 @@ const _SHEARLAB_QMF = [
 # − 3x₁³x₂ − 5x₂² + 15x₁²x₂² − 3x₁x₂³ + 5x₁³x₂³)/32 is −1 on the horizontal fan
 # |ω₂| < |ω₁| (F₄(π, 0) = −1) and +1 on the vertical one, so P = (1 − F₄)/2
 # passes the horizontal fan and P + P' = 1
-# with P' the transposed filter.  Returns the 9 × 9 taps, origin at the centre.
+# with P' the transposed filter.  Returns the 9 × 9 taps, origin at the center.
 function _maxflat_fan()
     F(x1, x2) = (x1 - x2) * (35 - 5x1^2 + 25x1 * x2 - 3x1^3 * x2 - 5x2^2 + 15x1^2 * x2^2 - 3x1 * x2^3 + 5x1^3 * x2^3) / 32
     n = 16   # P is a trigonometric polynomial of degree 4 per axis: 16 samples are exact
@@ -74,7 +74,7 @@ tight — the inverse uses the dual filters.
   the highpass is its modulation `(-1)^n h[n]`.  The default is ShearLab's
   9-tap maximally flat filter.
 - `fan`: the 2-D fan filter `P` as a matrix of taps with the origin at its
-  centre, passing the horizontal fan `|ω₂| < |ω₁|`; the default is the
+  center, passing the horizontal fan `|ω₂| < |ω₁|`; the default is the
   maximally flat fan filter of order 4 of da Cunha, Zhou & Do (2006).
 
 The two cones overlap at the seam lines (`|k| = 2^d` in both), as in ShearLab.
@@ -153,10 +153,10 @@ end
 MultiscaleTransformsBase.subband_layout(::CompactShearlets, dims::Tuple) =
     throw(ArgumentError("compactly supported shearlets support 2-D and 3-D data, got size $(dims)"))
 
-# ── Centred filter algebra ────────────────────────────────────────────────────
-# Filters are arrays with odd sides and the origin at the centre.
+# ── Centered filter algebra ────────────────────────────────────────────────────
+# Filters are arrays with odd sides and the origin at the center.
 
-_centre(n::Int) = (n + 1) ÷ 2
+_center(n::Int) = (n + 1) ÷ 2
 
 # Insert r − 1 zeros between the taps along `dim`.
 _upsample(a::AbstractArray, r::Int, dim::Int) = _upsample(a, r, Val(dim))
@@ -177,12 +177,12 @@ _downsample(a::AbstractArray, r::Int, dim::Int) = _downsample(a, r, Val(dim))
 
 function _downsample(a::AbstractArray, r::Int, ::Val{D}) where {D}
     r == 1 && return copy(a)
-    c = _centre(size(a, D))
+    c = _center(size(a, D))
     m = (c - 1) ÷ r
     return copy(_slice(a, Val(D), (c - m * r):r:(c + m * r)))
 end
 
-# Full linear convolution of two centred arrays of the same dimension, by real
+# Full linear convolution of two centered arrays of the same dimension, by real
 # FFTs of a size with small prime factors (these sizes are otherwise arbitrary,
 # and an FFT of a large prime size is several times slower).
 function _conv(a::AbstractArray, b::AbstractArray)
@@ -207,9 +207,9 @@ function _atrous_lowpass(h::Vector{Float64}, j::Int)
 end
 
 # The j-level wavelet filter: ĝ_j(ξ) = ĝ(2^(j−1) ξ) ĥ_{j−1}(ξ), with the highpass
-# of the mirror pair g[n] = (−1)^n h[n] (n the offset from the centre).
+# of the mirror pair g[n] = (−1)^n h[n] (n the offset from the center).
 function _atrous_highpass(h::Vector{Float64}, j::Int)
-    c = _centre(length(h))
+    c = _center(length(h))
     g = [(-1)^(n - c) * h[n] for n in eachindex(h)]
     return _conv(upsample_filter(g, 2^(j - 1)), _atrous_lowpass(h, j - 1))
 end
@@ -224,7 +224,7 @@ function _digital_shears(f::Matrix{Float64}, d::Int, h::Vector{Float64})
     hd = _atrous_lowpass(h, d)
     fine = _conv(_upsample(f, r, Val(1)), _along(r .* hd, 1, Val(2)))
     n1, n2 = size(fine)
-    c1, c2 = _centre(n1), _centre(n2)
+    c1, c2 = _center(n1), _center(n2)
     return map(-r:r) do k
         pad = abs(k) * (c2 - 1)
         out = zeros(n1 + 2pad, n2)
@@ -240,13 +240,13 @@ end
 # The transform axes with `h` first, so that `rfft` halves it.
 _rfft_region(h::Int, ::Val{N}) where {N} = (h, ntuple(a -> a < h ? a : a + 1, Val(N - 1))...)
 
-# The real frequency response of a centred, point-symmetric filter on a DFT grid
+# The real frequency response of a centered, point-symmetric filter on a DFT grid
 # of size `n` (one entry per axis of `f`): the filter folded onto the periodic
 # grid (offset o ↦ o mod n) and transformed, with its axis `h` halved as by
 # `rfft` (`h = 0`: none).
-function _centred_response(f::AbstractArray{<:Any, N}, n::NTuple{N, Int}, h::Int) where {N}
+function _centered_response(f::AbstractArray{<:Any, N}, n::NTuple{N, Int}, h::Int) where {N}
     folded = zeros(n)
-    c = _centre.(size(f))
+    c = _center.(size(f))
     for I in CartesianIndices(f)
         folded[CartesianIndex(ntuple(a -> mod(I[a] - c[a], n[a]) + 1, Val(ndims(f))))] += f[I]
     end
@@ -276,15 +276,15 @@ end
 function _shearlet_masks(sys::CompactShearlets, dims::NTuple{2, Int}, ::Type{Tf}) where {Tf}
     J, h = sys.scales, sys.qmf
     hJ = _atrous_lowpass(h, J)
-    responses = [_centred_response(hJ .* transpose(hJ), dims, 1)]
+    responses = [_centered_response(hJ .* transpose(hJ), dims, 1)]
     for ℓ in 1:J
         ψ = _conv(_compact_wedge(sys, ℓ), _along(_atrous_highpass(h, J + 1 - ℓ), 1, Val(2)))
         sheared = _digital_shears(ψ, sys.shear_levels[ℓ], h)
         for f in sheared
-            push!(responses, _centred_response(f, dims, 1))
+            push!(responses, _centered_response(f, dims, 1))
         end
         for f in sheared
-            push!(responses, _centred_response(permutedims(f), dims, 1))
+            push!(responses, _centered_response(permutedims(f), dims, 1))
         end
     end
     post = _compact_post(sum(a -> a .^ 2, responses), dims, Tf)
@@ -305,7 +305,7 @@ end
 # A response over the axes `ax` (one or two, in the response's own order) placed
 # on the 3-D `rfft` grid of `dims`: axis 1 halved, the axes not in `ax` singletons.
 function _oriented_response(f::AbstractArray, ax::NTuple{K, Int}, dims::NTuple{3, Int}) where {K}
-    R0 = _centred_response(f, map(a -> dims[a], ax), something(findfirst(==(1), ax), 0))
+    R0 = _centered_response(f, map(a -> dims[a], ax), something(findfirst(==(1), ax), 0))
     # Put the two axes of a 2-D response in increasing order (no rebinding: the
     # closure below would capture the variables in a box).
     R, axs = K == 2 && ax[1] > ax[2] ? (permutedims(R0), (ax[2], ax[1])) : (R0, ax)

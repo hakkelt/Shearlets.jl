@@ -133,7 +133,7 @@ end
 
 The engine of `masks` for data of element type `Td` and the size of `rb`, a
 real array of the filter type (host or device) that `plans(rb, X)` turns into the
-pair (`rfft` plan, unnormalised inverse plan) with `X` a spectrum buffer.  The
+pair (`rfft` plan, unnormalized inverse plan) with `X` a spectrum buffer.  The
 other keywords are those of `MaskBankEngine` (`planner` and `forward_planner`:
 chunked paths, for devices).
 

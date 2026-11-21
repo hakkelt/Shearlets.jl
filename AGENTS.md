@@ -101,7 +101,7 @@ FFT. The pieces:
 
 - **Band-limited shearlets follow the FFST tutorial, not MATLAB.** MATLAB's
   `shearletSystem` (Wavelet Toolbox) is FFST-like but uses its own grid, keeps
-  the seam halves unglued and renormalises to Parseval; it is not a bitwise
+  the seam halves unglued and renormalizes to Parseval; it is not a bitwise
   reference. Seam shearlets are glued generically: two cone elements are the
   same shearlet when their central directions are parallel.
 - **Compact shearlets follow ShearLab 3D's Definition 3.2.** Checked against

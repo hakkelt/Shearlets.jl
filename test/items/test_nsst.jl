@@ -41,7 +41,7 @@ end
             ]
             c = analyze(sys, wave(dims, f))
             e = vec(sum(abs2, c; dims = (1, 2)))
-            # The pyramid spreads a frequency over neighbouring scales; take the
+            # The pyramid spreads a frequency over neighboring scales; take the
             # direction that holds most energy, summed over scales.
             dirs = unique((i.cone, i.shear) for i in L if !islowpass(i) && i.scale >= 2)
             best = argmax(d -> sum(e[i] for i in eachindex(L) if (L[i].cone, L[i].shear) == d && L[i].scale >= 2), dirs)

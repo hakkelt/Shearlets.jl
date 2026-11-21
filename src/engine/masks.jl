@@ -36,7 +36,7 @@ MultiscaleFilterBanks.mask_accumulate!(A, m::_ProductMask, F) = (A .+= (m.f1 .* 
 MultiscaleFilterBanks.mask_accumulate!(A, m::_ProductMask, F, s) = (A .+= (s .* m.f1 .* m.f2) .* F; A)
 
 # On the host the products of `_ProductMask`s are loops: Base's broadcast over
-# the singleton axes of the factors does not vectorise, nor does a complex
+# the singleton axes of the factors does not vectorize, nor does a complex
 # product, so the complex arrays are read as pairs of reals.  The first axis is
 # innermost, and a factor without it is a scalar along it.
 const _HostProduct{Tf} = _ProductMask{Tf, Array{Tf, 3}, Array{Tf, 3}}

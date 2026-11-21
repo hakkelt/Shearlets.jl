@@ -38,7 +38,7 @@ the three pyramids around the axes).
   has `s = 2^(j-1)` shears per side of each cone; in 2-D that is `4s` shearlets,
   two of them seam shearlets glued across the cones.
 - `smooth`: use the tensor-product lowpass of Guo & Labate's construction, which
-  makes the seam shearlets smooth (and better localised in space) at the price
+  makes the seam shearlets smooth (and better localized in space) at the price
   of a less cone-aligned lowpass.
 - `alpha`: the anisotropy of α-shearlets, `0 ≤ α ≤ 2`: `s = round(2^((2-α)(j-1)))`
   shears per side.  `α = 1` is parabolic scaling (shearlets), `α = 2` keeps

@@ -9,14 +9,14 @@ using Shearlets, Plots, FFTW, Printf
 Plots.default(show = false, fontfamily = "sans-serif")
 
 # Frequency plots put ω₁ (axis 1, the rows of a matrix) on the horizontal axis
-# and ω₂ on the vertical one, as the papers do, with ω = 0 in the centre.
-centred(a::AbstractMatrix) = permutedims(fftshift(a))
+# and ω₂ on the vertical one, as the papers do, with ω = 0 in the center.
+centered(a::AbstractMatrix) = permutedims(fftshift(a))
 bins(n) = fftshift(fftfreq(n, n))
 
 # The subband with the largest response at every frequency.
 function owner_map(sys, n)
     Ψ = shearlet_spectra(sys, (n, n))
-    return centred([argmax(view(Ψ, i, j, :)) for i in 1:n, j in 1:n])
+    return centered([argmax(view(Ψ, i, j, :)) for i in 1:n, j in 1:n])
 end
 
 # A label per lobe of every subband of an owner map: the mean position of its
@@ -46,22 +46,22 @@ function tiling(sys, n; labels = true, kw...)
         annotations = labels ? lobe_labels(own) : [], kw...)
 end
 
-# The half-maximum contour of |ψ̂|² of every subband, coloured by scale: the
+# The half-maximum contour of |ψ̂|² of every subband, colored by scale: the
 # essential supports, for systems whose masks overlap.
 function covering(sys, n; kw...)
     L = subband_layout(sys, (n, n)); Ψ = shearlet_spectra(sys, (n, n))
     p = plot(; aspect_ratio = :equal, legend = false, xlims = (-n / 2, n / 2), ylims = (-n / 2, n / 2),
         xlabel = "ω₁", ylabel = "ω₂", kw...)
     for (i, l) in enumerate(L)
-        A = centred(Ψ[:, :, i] .^ 2)
+        A = centered(Ψ[:, :, i] .^ 2)
         contour!(p, bins(n), bins(n), A ./ maximum(A); levels = [0.5], colorbar = false, lw = 1,
             color = islowpass(l) ? :black : palette(:tab10)[l.scale])
     end
     return p
 end
 
-# An owner map coloured by the cone of each subband (grey: the lowpass), with
-# the boundaries between subbands in black: unlike one colour per subband, this
+# An owner map colored by the cone of each subband (gray: the lowpass), with
+# the boundaries between subbands in black: unlike one color per subband, this
 # stays readable with any number of subbands.
 function cone_map(own, L; kw...)
     cone = map(i -> L[i].cone, own)
@@ -74,17 +74,17 @@ function cone_map(own, L; kw...)
 end
 
 # A subband's spectrum and its element in space (the inverse DFT of the
-# spectrum, centred and cropped to `w` samples around the origin).
+# spectrum, centered and cropped to `w` samples around the origin).
 function element(Ψ, i, w)
     n = size(Ψ, 1); m = n ÷ 2 + 1
-    ψ = centred(real(ifft(Ψ[:, :, i])))
+    ψ = centered(real(ifft(Ψ[:, :, i])))
     return ψ[(m - w):(m + w), (m - w):(m + w)]
 end
 plot_space(ψ; kw...) = (cl = maximum(abs, ψ); w = size(ψ, 1) ÷ 2;
     heatmap(-w:w, -w:w, ψ; color = :RdBu, clims = (-cl, cl), aspect_ratio = :equal,
         colorbar = false, xlims = (-w, w), ylims = (-w, w), kw...))
 plot_freq(Ψ, i; color = :Reds, kw...) = (n = size(Ψ, 1);
-    heatmap(bins(n), bins(n), centred(Ψ[:, :, i]); color, aspect_ratio = :equal,
+    heatmap(bins(n), bins(n), centered(Ψ[:, :, i]); color, aspect_ratio = :equal,
         colorbar = false, xlims = (-n / 2, n / 2), ylims = (-n / 2, n / 2), kw...))
 ```
 
@@ -140,9 +140,9 @@ largest along) and a `shear` per remaining axis. All systems share the shear
 convention: subband `(cone c, shear k)` at a scale with ``s`` shears per side
 collects the frequencies with ``\omega_e / \omega_c \approx -k_e / s``.
 
-The left panel colours every frequency of a two-scale band-limited system by
+The left panel colors every frequency of a two-scale band-limited system by
 the region it belongs to; the right one by the subband with the largest
-response there, labelled with its position in `subband_layout` (compare
+response there, labeled with its position in `subband_layout` (compare
 Häuser & Steidl, Figs. 5 and 11):
 
 ```@example theory
@@ -251,7 +251,7 @@ two numbers here:
 tight = dropdims(sum(abs2, Ψ; dims = 3); dims = 3) .- 1
 x = randn(n, n)
 roundtrip = synthesize(sys, analyze(sys, x)) .- x
-p1 = heatmap(bins(n), bins(n), centred(tight); color = :RdBu, clims = (-1, 1) .* 1e-14,
+p1 = heatmap(bins(n), bins(n), centered(tight); color = :RdBu, clims = (-1, 1) .* 1e-14,
     aspect_ratio = :equal, title = "Σ ψ̂² − 1", xlabel = "ω₁", ylabel = "ω₂")
 p2 = heatmap(roundtrip; color = :RdBu, clims = (-1, 1) .* 1e-14, aspect_ratio = :equal,
     axis = false, title = "inverse(forward(x)) − x")
@@ -295,7 +295,7 @@ for smooth in (false, true)
     push!(ps, heatmap(-(n ÷ 2 - 1):(n ÷ 2 - 1), -(n ÷ 2 - 1):(n ÷ 2 - 1), log10.(abs.(ψs) ./ maximum(abs, ψs) .+ 1e-12);
         color = :viridis, clims = (-6, 0), aspect_ratio = :equal, title = "$name, log₁₀ |ψ| in space"))
     far = [max(abs(a), abs(b)) > 16 for a in -(n ÷ 2 - 1):(n ÷ 2 - 1), b in -(n ÷ 2 - 1):(n ÷ 2 - 1)]
-    @printf("%-6s energy beyond 16 samples from the centre: %.1e\n", name, sum(abs2, ψs[far]) / sum(abs2, ψs))
+    @printf("%-6s energy beyond 16 samples from the center: %.1e\n", name, sum(abs2, ψs[far]) / sum(abs2, ψs))
 end
 plot(ps[[1, 3, 2, 4]]...; layout = (2, 2), size = (760, 700))
 savefig("bl_smooth.png"); nothing # hide
@@ -306,7 +306,7 @@ savefig("bl_smooth.png"); nothing # hide
 In frequency the smooth seam element has rounded ends instead of the Meyer
 element's corners. Smoothness is a statement about the continuous functions,
 though: sampled on a grid of this size, both elements leave about the same
-share of their energy far from the centre (the printed numbers). The smooth
+share of their energy far from the center (the printed numbers). The smooth
 variant's lowpass is a square rather than cone-aligned.
 
 ### α-shearlets
@@ -317,7 +317,7 @@ which on the FFST grid means ``s_j = 2^{(2-\alpha)(j-1)}`` shears per side at
 scale ``j``. ``\alpha = 1`` is the shearlet case, ``\alpha = 2`` keeps one shear
 per side at every scale (a wavelet-like, isotropic tiling) and ``\alpha \to 0``
 approaches ridgelets, whose number of directions quadruples with every scale.
-The cones are coloured blue (cone 1) and orange (cone 2), the lowpass grey,
+The cones are colored blue (cone 1) and orange (cone 2), the lowpass gray,
 and the boundaries between subbands are drawn in black. The glued seam
 subbands are listed under cone 1, so they are blue:
 
@@ -341,12 +341,12 @@ face of two pyramids, and on the edges ``|\omega_1| = |\omega_2| = |\omega_3|``
 where all three meet. Each subband is then one central direction ``v`` with
 ``\lVert v\rVert_\infty = s`` counted once up to sign, so scale ``j`` has
 ``\big((2s+1)^3 - (2s-1)^3\big)/2`` subbands, and the system is again a
-Parseval frame. Two slices of the frequency cube show the tiling, coloured by
+Parseval frame. Two slices of the frequency cube show the tiling, colored by
 pyramid (blue, orange and green for axes 1, 2 and 3) with the subband
 boundaries in black. The slice ``\omega_3 = 0`` through the origin shows the 2-D
 tiling again. The slice ``\omega_3 = 20`` cuts through pyramid 3, where the
 subbands form a grid of shears ``(k_1, k_2)``, surrounded by the other two
-pyramids. A seam subband glued across pyramids takes the colour of the lowest
+pyramids. A seam subband glued across pyramids takes the color of the lowest
 pyramid it belongs to:
 
 ```@example theory
@@ -355,8 +355,8 @@ sys3 = BandlimitedShearlets(scales = 2)
 L3 = subband_layout(sys3, (n3, n3, n3))
 Ψ3 = shearlet_spectra(sys3, (n3, n3, n3))
 own3 = [argmax(view(Ψ3, i, j, k, :)) for i in 1:n3, j in 1:n3, k in 1:n3]
-plot(cone_map(centred(own3[:, :, 1]), L3; title = "ω₃ = 0"),
-    cone_map(centred(own3[:, :, 21]), L3; title = "ω₃ = 20");
+plot(cone_map(centered(own3[:, :, 1]), L3; title = "ω₃ = 0"),
+    cone_map(centered(own3[:, :, 21]), L3; title = "ω₃ = 20");
     layout = (1, 2), size = (760, 380))
 savefig("bl_3d.png"); nothing # hide
 ```
@@ -412,10 +412,10 @@ level with ``2^d`` directions has ``2^{d-2}`` shears per side of each cone.
 The frequency responses of the subbands of one level are the products of the
 level's bandpass with each shearing filter. Below, the half-maximum contour of
 ``|\hat\psi_i|^2`` for every subband of the default system (8, 8, 16 and 16
-directions from coarse to fine), coloured by scale. The second panel zooms in on
+directions from coarse to fine), colored by scale. The second panel zooms in on
 the two coarse scales. The third shows the radial profile of every pyramid level
 ``B_j``, the sum of the level's directional subbands. The pyramid levels overlap
-and do not peak at one, unlike the band-limited radial windows, so colouring each
+and do not peak at one, unlike the band-limited radial windows, so coloring each
 frequency by its strongest subband would show a ragged picture:
 
 ```@example theory
@@ -451,7 +451,7 @@ for fs in (8, 32, 0)
     s = NSSTShearlets(filter_size = fs)
     Ψs = shearlet_spectra(s, (n, n))
     sub = findfirst(==(ShearletIndex{1}(1, 1, (-1,))), subband_layout(s, (n, n)))
-    push!(ps, heatmap(bins(n), bins(n), centred(abs.(Ψs[:, :, sub])); color = :viridis,
+    push!(ps, heatmap(bins(n), bins(n), centered(abs.(Ψs[:, :, sub])); color = :viridis,
         aspect_ratio = :equal, colorbar = false, xlims = (-48, 48), ylims = (-48, 48),
         title = fs == 0 ? "filter_size = 0 (DFT grid)" : "filter_size = $fs"))
 end
@@ -467,7 +467,7 @@ The NSST is a frame but not a tight one: the inverse is not the adjoint.
 
 [`CompactShearlets`](@ref) are the digital shearlets of G. Kutyniok, W.-Q. Lim
 and R. Reisenhofer's ShearLab 3D, with the nonseparable generator of W.-Q.
-Lim. Band-limited shearlets are perfectly localised in frequency and decay
+Lim. Band-limited shearlets are perfectly localized in frequency and decay
 only polynomially in space; these are the opposite, **finite filters** in
 space, at the price of a frame that is not tight.
 
@@ -505,8 +505,8 @@ p2 = plot(ω, H; legend = false, lw = 2, title = "|H(ω)|", xlabel = "ω",
     xticks = ([0, π / 2, π], ["0", "π/2", "π"]))
 nf = 128
 P = zeros(nf, nf); P[1:9, 1:9] .= sysc.fan
-P = circshift(P, (-4, -4))                   # the fan's centre tap at the origin
-p3 = heatmap(range(-π, π; length = nf), range(-π, π; length = nf), centred(abs.(fft(P)));
+P = circshift(P, (-4, -4))                   # the fan's center tap at the origin
+p3 = heatmap(range(-π, π; length = nf), range(-π, π; length = nf), centered(abs.(fft(P)));
     color = :viridis, aspect_ratio = :equal, colorbar = false, title = "fan filter |P(ω)|",
     xlabel = "ω₁", ylabel = "ω₂")
 plot(p1, p2, p3; layout = (1, 3), size = (950, 300), bottom_margin = 5Plots.mm, left_margin = 3Plots.mm)
@@ -555,14 +555,14 @@ savefig("compact_seam.png"); nothing # hide
 
 ![](compact_seam.png)
 
-Colouring every frequency by the subband with the largest response, as for
+Coloring every frequency by the subband with the largest response, as for
 the band-limited system above, gives a ragged picture here: the responses
-overlap and are not normalised, the two seam copies are nearly equal, and the
+overlap and are not normalized, the two seam copies are nearly equal, and the
 finite filters' side lobes win wherever the main lobes are weak. The essential
 supports read better as contours: below, the half-maximum contour of
-``|\hat\psi_i|^2`` of every subband, coloured by scale (compare Lim, Fig. 2),
+``|\hat\psi_i|^2`` of every subband, colored by scale (compare Lim, Fig. 2),
 next to the same plot for the band-limited system. Each compact shearlet's
-support is a rounded wedge, and the wedges overlap their neighbours. The
+support is a rounded wedge, and the wedges overlap their neighbors. The
 band-limited windows meet exactly on the cone and scale boundaries:
 
 ```@example theory
@@ -578,12 +578,12 @@ The wedges point where the shear convention says. On average over its
 spectrum, each subband's direction is within 0.4° of
 ``\arctan(-k/2^d)`` (3.3° on the finest scale, whose wedges wrap around the
 corners of the grid). Between 80 and 98 % of a subband's energy lies in its
-own angular sector, the directions closer to its shear than to its neighbours'.
+own angular sector, the directions closer to its shear than to its neighbors'.
 
 Since ``\sum_i |\hat\psi_i|^2`` is not constant, the frame is not tight. Its
 bounds are the extremes of that sum over the grid, and the inverse uses the
 dual filters ``\hat\psi_i / \sum_i |\hat\psi_i|^2`` (ShearLab 3D, eqs. 31–33).
-ShearLab 3D's Fig. 10 lists the bounds of its systems normalised to ``B = 1``;
+ShearLab 3D's Fig. 10 lists the bounds of its systems normalized to ``B = 1``;
 for this package's systems with the same directions per scale:
 
 ```@example theory
@@ -613,7 +613,7 @@ per scale (ShearLab 3D, Definitions 3.3–3.4).
 | | `BandlimitedShearlets` | `NSSTShearlets` | `CompactShearlets` |
 |---|---|---|---|
 | Frame | Parseval (inverse = adjoint) | non-tight; inverse sums each level and inverts the pyramid | non-tight; dual-frame inverse |
-| Localisation | exact in frequency, polynomial decay in space | à trous pyramid × ``L \times L`` shearing filters | finite filters in space |
+| Localization | exact in frequency, polynomial decay in space | à trous pyramid × ``L \times L`` shearing filters | finite filters in space |
 | Dimensions | 2-D, 3-D | 2-D | 2-D, 3-D |
 | Subbands at 4 scales (2-D) | 61 | 49 (default directions) | 57 |
 | Variants | `smooth`, `alpha` | `directions`, `filter_size`, `pyramid` | `shear_levels`, `qmf`, `fan` |

@@ -38,7 +38,7 @@ MultiscaleTransformsBase.subband(::ShearletSystem, c::AbstractArray, i::Integer)
 """
     similar_coefficients(system::ShearletSystem, x) -> AbstractArray
 
-Uninitialised coefficients of `system` for data like `x`: an array like `x`
+Uninitialized coefficients of `system` for data like `x`: an array like `x`
 (host or device) of element type `float(eltype(x))` and size
 `(size(x)..., nsubbands(system, size(x)))`.
 """

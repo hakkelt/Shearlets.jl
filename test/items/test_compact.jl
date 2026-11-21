@@ -18,7 +18,7 @@
         @test abs(sum(_atrous_highpass(h, j))) < 1.0e-14
         @test isodd(length(_atrous_highpass(h, j)))
     end
-    # Upsampling and downsampling keep the origin at the centre.
+    # Upsampling and downsampling keep the origin at the center.
     a = collect(1.0:5.0)
     @test _upsample(a, 3, 1) == [1, 0, 0, 2, 0, 0, 3, 0, 0, 4, 0, 0, 5]
     @test _downsample(_upsample(a, 3, 1), 3, 1) == a

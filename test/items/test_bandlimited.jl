@@ -177,7 +177,7 @@ end
     rng = Xoshiro(11)
     # (31, 33) Float32: the slices of stacked coefficients are not 16-byte
     # aligned, so the plans take any alignment.
-    for (sys, dims) in ((BandlimitedShearlets(scales = 2), (31, 33)), (NSSTShearlets(directions = [2, 2]), (32, 32))),
+    for (sys, dims) in ((BandlimitedShearlets(scales = 2), (31, 33)), (NSSTShearlets(direction_levels = [2, 2]), (32, 32))),
             T in (Float32, ComplexF32)
         x = T <: Real ? randn(rng, T, dims...) : complex.(randn(rng, Float32, dims...), randn(rng, Float32, dims...))
         ws = make_workspace(sys, T, dims)

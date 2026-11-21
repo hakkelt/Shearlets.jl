@@ -1,9 +1,9 @@
 @testitem "NSST: perfect reconstruction" tags = [:nsst] begin
     using Random
     for sys in (
-                NSSTShearlets(directions = [2, 3, 3]),
-                NSSTShearlets(directions = [2, 3], filter_size = 0),
-                NSSTShearlets(directions = [3], filter_size = 9),
+                NSSTShearlets(direction_levels = [2, 3, 3]),
+                NSSTShearlets(direction_levels = [2, 3], filter_size = 0),
+                NSSTShearlets(direction_levels = [3], filter_size = 9),
             ), dims in ((64, 64), (63, 80))
         x = randn(Xoshiro(42), dims...)
         c = analyze(sys, x)
@@ -14,7 +14,7 @@
 end
 
 @testitem "NSST: shearing filters sum to one, and the pyramid telescopes" tags = [:nsst] begin
-    sys = NSSTShearlets(directions = [2, 3])
+    sys = NSSTShearlets(direction_levels = [2, 3])
     dims = (48, 64)
     A = shearlet_spectra(sys, dims)
     S = shearlet_spectra(sys, dims; synthesis = true)
@@ -23,7 +23,7 @@ end
     # The directional subbands of a scale share their synthesis mask.
     for j in 1:2
         idx = findall(i -> i.scale == j, L)
-        @test length(idx) == 2^sys.directions[j]
+        @test length(idx) == 2^sys.direction_levels[j]
         @test all(i -> selectdim(S, 3, i) == selectdim(S, 3, idx[1]), idx)
     end
 end
@@ -32,7 +32,7 @@ end
     wave(dims, f) = [cospi(2 * (f[1] * (i - 1) / dims[1] + f[2] * (j - 1) / dims[2])) for i in 1:dims[1], j in 1:dims[2]]
     dims = (128, 128)
     for fs in (nothing, 0)
-        sys = NSSTShearlets(directions = [2, 3, 3], filter_size = fs)
+        sys = NSSTShearlets(direction_levels = [2, 3, 3], filter_size = fs)
         L = subband_layout(sys, dims)
         # 2^3 directions: s = 2 shears per side, slope ω₂/ω₁ = -k/2 in cone 1.
         for (f, cone, k) in [
@@ -52,7 +52,7 @@ end
 
 @testitem "NSST: shift invariance and real-linearity" tags = [:nsst] begin
     using Random
-    sys = NSSTShearlets(directions = [2, 3])
+    sys = NSSTShearlets(direction_levels = [2, 3])
     rng = Xoshiro(42)
     x = randn(rng, 64, 48)
     @test maximum(abs, circshift(analyze(sys, x), (3, -7, 0)) - analyze(sys, circshift(x, (3, -7)))) < 1.0e-10
@@ -61,11 +61,11 @@ end
 end
 
 @testitem "NSST: argument checks" tags = [:nsst] begin
-    @test_throws ArgumentError NSSTShearlets(directions = Int[])
-    @test_throws ArgumentError NSSTShearlets(directions = [1, 3])
-    @test_throws ArgumentError NSSTShearlets(directions = [2, 3], filter_size = [16])
+    @test_throws ArgumentError NSSTShearlets(direction_levels = Int[])
+    @test_throws ArgumentError NSSTShearlets(direction_levels = [1, 3])
+    @test_throws ArgumentError NSSTShearlets(direction_levels = [2, 3], filter_size = [16])
     @test_throws ArgumentError NSSTShearlets(pyramid = FilterPair([0.5, 0.5], [1.0, 1.0]))
-    @test NSSTShearlets(directions = [2, 3, 4, 4]).filter_size == [32, 32, 16, 16]
+    @test NSSTShearlets(direction_levels = [2, 3, 4, 4]).filter_size == [32, 32, 16, 16]
     @test NSSTShearlets() == NSSTShearlets()
     @test hash(NSSTShearlets()) == hash(NSSTShearlets())
     other = FilterPair([0.25, 0.5, 0.25], [-0.125, -0.25, 0.75, -0.25, -0.125])

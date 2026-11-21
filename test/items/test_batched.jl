@@ -8,7 +8,7 @@
     # One system per mask kind and synthesis shape.
     const cases = [
         (BandlimitedShearlets(scales = 2), (64, 48)),     # sparse masks, layered synthesis
-        (NSSTShearlets(directions = [2, 3]), (64, 64)),   # dense masks, grouped synthesis
+        (NSSTShearlets(direction_levels = [2, 3]), (64, 64)),   # dense masks, grouped synthesis
         (CompactShearlets(scales = 2), (64, 64)),         # dense masks, post-factor
         (BandlimitedShearlets(scales = 1), (16, 20, 24)),
         (CompactShearlets(scales = 1), (16, 16, 16)),     # factored masks

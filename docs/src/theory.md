@@ -427,7 +427,7 @@ p2 = covering(sysn, n; title = "zoomed: scales 1 and 2", xlims = (-40, 40), ylim
 r = 1:(n ÷ 2)
 p3 = plot(; xlabel = "ω₁ (bins), ω₂ = 0", title = "pyramid levels", xscale = :log2, legend = :topleft)
 plot!(p3, r, Ψn[r, 1, 1]; label = "lowpass", lw = 2)
-for j in 1:length(sysn.directions)
+for j in 1:length(sysn.direction_levels)
     plot!(p3, r, vec(sum(Ψn[r, 1, [i for (i, l) in enumerate(Ln) if l.scale == j]]; dims = 2));
         label = "level $j", lw = 2)
 end
@@ -616,7 +616,7 @@ per scale (ShearLab 3D, Definitions 3.3–3.4).
 | Localization | exact in frequency, polynomial decay in space | à trous pyramid × ``L \times L`` shearing filters | finite filters in space |
 | Dimensions | 2-D, 3-D | 2-D | 2-D, 3-D |
 | Subbands at 4 scales (2-D) | 61 | 49 (default directions) | 57 |
-| Variants | `smooth`, `alpha` | `directions`, `filter_size`, `pyramid` | `shear_levels`, `qmf`, `fan` |
+| Variants | `smooth`, `alpha` | `direction_levels`, `filter_size`, `pyramid` | `shear_levels`, `qmf`, `fan` |
 
 ## References
 

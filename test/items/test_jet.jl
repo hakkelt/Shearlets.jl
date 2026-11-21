@@ -5,13 +5,13 @@
 
     # ── Systems / indices ────────────────────────────────────────────────────
     @test_call target_modules = M BandlimitedShearlets(scales = 2)
-    @test_call target_modules = M NSSTShearlets(directions = [2, 3])
+    @test_call target_modules = M NSSTShearlets(direction_levels = [2, 3])
     @test_call target_modules = M CompactShearlets(scales = 2)
     @test_call target_modules = M ShearletIndex{1}(1, 1, (0,))
     @test_call target_modules = M islowpass(ShearletIndex{1}(0, 0, (0,)))
 
     systems = (
-        (BandlimitedShearlets(scales = 2), (32, 32)), (NSSTShearlets(directions = [2, 3]), (32, 32)),
+        (BandlimitedShearlets(scales = 2), (32, 32)), (NSSTShearlets(direction_levels = [2, 3]), (32, 32)),
         (CompactShearlets(scales = 1), (32, 32)), (BandlimitedShearlets(scales = 1), (8, 8, 8)),
         (CompactShearlets(scales = 1), (8, 8, 8)),
     )
@@ -64,13 +64,13 @@ end
     M = (Shearlets,)
 
     @test_opt target_modules = M BandlimitedShearlets(scales = 2)
-    @test_opt target_modules = M NSSTShearlets(directions = [2, 3])
+    @test_opt target_modules = M NSSTShearlets(direction_levels = [2, 3])
     @test_opt target_modules = M CompactShearlets(scales = 2)
     @test_opt target_modules = M ShearletIndex{1}(1, 1, (0,))
     @test_opt target_modules = M islowpass(ShearletIndex{1}(0, 0, (0,)))
 
     for (sys, dims) in (
-            (BandlimitedShearlets(scales = 2), (32, 32)), (NSSTShearlets(directions = [2, 3]), (32, 32)),
+            (BandlimitedShearlets(scales = 2), (32, 32)), (NSSTShearlets(direction_levels = [2, 3]), (32, 32)),
             (CompactShearlets(scales = 1), (32, 32)), (BandlimitedShearlets(scales = 1), (8, 8, 8)),
             (CompactShearlets(scales = 1), (8, 8, 8)),
         )

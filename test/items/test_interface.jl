@@ -4,7 +4,7 @@
     rng = Xoshiro(11)
     for (sys, dims, other) in (
             (BandlimitedShearlets(scales = 2), (32, 40), (32, 32)),
-            (NSSTShearlets(directions = [2, 3]), (32, 40), (32, 32)),
+            (NSSTShearlets(direction_levels = [2, 3]), (32, 40), (32, 32)),
             (CompactShearlets(scales = 2), (33, 32), (32, 32)),
             (BandlimitedShearlets(scales = 1), (12, 16, 10), (8, 8, 8)),
             (CompactShearlets(scales = 1), (12, 16, 10), (8, 8, 8)),
@@ -58,8 +58,8 @@ end
         BandlimitedShearlets(),
         BandlimitedShearlets(scales = 3, smooth = true, alpha = 0.5),
         NSSTShearlets(),
-        NSSTShearlets(directions = [2, 3], filter_size = 0),
-        NSSTShearlets(directions = [2], pyramid = FilterPair([0.25, 0.5, 0.25], [-0.125, 0.25, 0.75, 0.25, -0.125])),
+        NSSTShearlets(direction_levels = [2, 3], filter_size = 0),
+        NSSTShearlets(direction_levels = [2], pyramid = FilterPair([0.25, 0.5, 0.25], [-0.125, 0.25, 0.75, 0.25, -0.125])),
         CompactShearlets(),
         CompactShearlets(scales = 2, shear_levels = [0, 2], qmf = [0.25, 0.5, 0.25]),
     )
@@ -68,7 +68,7 @@ end
         @test sprint(show, MIME("text/plain"), sys) == repr(sys)
     end
     @test repr(BandlimitedShearlets()) == "BandlimitedShearlets(scales = 0, smooth = false, alpha = 1.0)"
-    @test repr(NSSTShearlets()) == "NSSTShearlets(directions = [3, 3, 4, 4], filter_size = [32, 32, 16, 16])"
+    @test repr(NSSTShearlets()) == "NSSTShearlets(direction_levels = [3, 3, 4, 4], filter_size = [32, 32, 16, 16])"
     @test repr(CompactShearlets()) == "CompactShearlets(scales = 4, shear_levels = [1, 1, 2, 2])"
 
     # A large custom filter is summarized; the text/plain display adds its taps.

@@ -9,7 +9,7 @@ const SUITE = BenchmarkGroup()
 
 const CASES = [
     ("bandlimited", BandlimitedShearlets(scales = 4), (256, 256)),
-    ("nsst", NSSTShearlets(directions = [3, 3, 4, 4]), (256, 256)),
+    ("nsst", NSSTShearlets(direction_levels = [3, 3, 4, 4]), (256, 256)),
     ("compact", CompactShearlets(scales = 4), (256, 256)),
     ("bandlimited3d", BandlimitedShearlets(scales = 2), (64, 64, 64)),
     ("compact3d", CompactShearlets(scales = 2), (64, 64, 64)),

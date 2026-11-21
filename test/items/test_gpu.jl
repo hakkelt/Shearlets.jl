@@ -78,7 +78,7 @@ end
 @testitem "GPU NSST at 512²" tags = [:gpu] setup = [GPUBackends, ChunkCases] begin
     using GPUEnv, Random
     const Adapt = GPUBackends.Adapt
-    sys, dims = NSSTShearlets(directions = [2, 3]), (512, 512)
+    sys, dims = NSSTShearlets(direction_levels = [2, 3]), (512, 512)
     rng = Xoshiro(9)
     for T in (Float32, ComplexF32)
         x = ChunkCases.random_input(rng, T, dims)

@@ -23,16 +23,16 @@
 # exact.  The frame is not tight; the inverse is not the adjoint.
 
 """
-    NSSTShearlets(; directions = [3, 3, 4, 4], filter_size = nothing, pyramid = CDF97)
+    NSSTShearlets(; direction_levels = [3, 3, 4, 4], filter_size = nothing, pyramid = CDF97)
 
 The nonsubsampled shearlet transform (NSST) of Easley, Labate & Lim (2008): a
-nonsubsampled Laplacian pyramid with `length(directions)` levels, each split by
-shearing filters into `2^directions[j]` directional subbands (scale `j = 1` is
-the coarsest).  Every subband has the size of the input.
+nonsubsampled Laplacian pyramid with `length(direction_levels)` levels, each
+split by shearing filters into `2^direction_levels[j]` directional subbands
+(scale `j = 1` is the coarsest).  Every subband has the size of the input.
 
-- `directions`: `log₂` of the number of directional subbands per scale, coarse to
-  fine, each at least `2`: `2^(d-2)` shears per side of each cone, two seam
-  subbands glued across the cones.
+- `direction_levels`: `log₂` of the number of directional subbands per scale,
+  coarse to fine, each at least `2`: `2^(d-2)` shears per side of each cone,
+  two seam subbands glued across the cones.
 - `filter_size`: the side `L` of the spatial shearing filters, per scale (a vector)
   or for all scales (an integer).  Larger filters resolve directions better near
   the origin; smaller ones are more local.  `0` samples the windows on the
@@ -56,33 +56,33 @@ taps.
    [doi:10.1016/j.acha.2007.09.003](https://doi.org/10.1016/j.acha.2007.09.003)
 """
 struct NSSTShearlets <: ShearletSystem
-    directions::Vector{Int}
+    direction_levels::Vector{Int}
     filter_size::Vector{Int}
     pyramid::FilterPair{Float64}
-    function NSSTShearlets(directions::AbstractVector{<:Integer}, filter_size::AbstractVector{<:Integer}, pyramid::FilterPair)
-        isempty(directions) && throw(ArgumentError("need at least one level"))
-        all(>=(2), directions) || throw(ArgumentError("each level needs at least 2^2 directions, got $(directions)"))
-        length(filter_size) == length(directions) ||
-            throw(ArgumentError("need one filter size per level, got $(length(filter_size)) for $(length(directions)) levels"))
+    function NSSTShearlets(direction_levels::AbstractVector{<:Integer}, filter_size::AbstractVector{<:Integer}, pyramid::FilterPair)
+        isempty(direction_levels) && throw(ArgumentError("need at least one level"))
+        all(>=(2), direction_levels) || throw(ArgumentError("each level needs at least 2^2 directions, got $(direction_levels)"))
+        length(filter_size) == length(direction_levels) ||
+            throw(ArgumentError("need one filter size per level, got $(length(filter_size)) for $(length(direction_levels)) levels"))
         all(>=(0), filter_size) || throw(ArgumentError("filter sizes must be non-negative"))
         for f in (pyramid.h, pyramid.g)
             (isodd(length(f)) && f ≈ reverse(f)) ||
                 throw(ArgumentError("the pyramid filters must be symmetric with an odd number of taps"))
         end
-        return new(Vector{Int}(directions), Vector{Int}(filter_size), FilterPair{Float64}(pyramid.h, pyramid.g))
+        return new(Vector{Int}(direction_levels), Vector{Int}(filter_size), FilterPair{Float64}(pyramid.h, pyramid.g))
     end
 end
 
-function NSSTShearlets(; directions::AbstractVector{<:Integer} = [3, 3, 4, 4], filter_size = nothing, pyramid::FilterPair = CDF97)
-    J = length(directions)
+function NSSTShearlets(; direction_levels::AbstractVector{<:Integer} = [3, 3, 4, 4], filter_size = nothing, pyramid::FilterPair = CDF97)
+    J = length(direction_levels)
     sizes = filter_size === nothing ? [j > J - 2 ? 16 : 32 for j in 1:J] :
         filter_size isa Integer ? fill(Int(filter_size), J) : collect(Int, filter_size)
-    return NSSTShearlets(directions, sizes, pyramid)
+    return NSSTShearlets(direction_levels, sizes, pyramid)
 end
 
 function Base.show(io::IO, sys::NSSTShearlets)
-    print(io, "NSSTShearlets(directions = ")
-    show(io, sys.directions)
+    print(io, "NSSTShearlets(direction_levels = ")
+    show(io, sys.direction_levels)
     print(io, ", filter_size = ")
     show(io, sys.filter_size)
     if sys.pyramid != CDF97
@@ -100,8 +100,8 @@ Base.show(io::IO, ::MIME"text/plain", sys::NSSTShearlets) =
     _show_with_taps(io, sys, sys.pyramid == CDF97 ? () : ("pyramid.h" => sys.pyramid.h, "pyramid.g" => sys.pyramid.g))
 
 Base.:(==)(a::NSSTShearlets, b::NSSTShearlets) =
-    a.directions == b.directions && a.filter_size == b.filter_size && a.pyramid == b.pyramid
-Base.hash(a::NSSTShearlets, h::UInt) = hash(a.directions, hash(a.filter_size, hash(a.pyramid, hash(NSSTShearlets, h))))
+    a.direction_levels == b.direction_levels && a.filter_size == b.filter_size && a.pyramid == b.pyramid
+Base.hash(a::NSSTShearlets, h::UInt) = hash(a.direction_levels, hash(a.filter_size, hash(a.pyramid, hash(NSSTShearlets, h))))
 
 # Shears per side of each cone at a scale with 2^d directions.
 _nsst_shears(d::Int) = 2^(d - 2)
@@ -110,7 +110,7 @@ _nsst_shears(d::Int) = 2^(d - 2)
 # k ∈ -s:s, cone 2 with k ∈ 1-s:s-1, the seam shearlets glued across the cones.
 function MultiscaleTransformsBase.subband_layout(sys::NSSTShearlets, ::NTuple{2, Int})
     layout = [_lowpass_index(Val(2))]
-    for (j, d) in enumerate(sys.directions), (c, k, _) in _bl_scale_elements(Val(2), _nsst_shears(d))
+    for (j, d) in enumerate(sys.direction_levels), (c, k, _) in _bl_scale_elements(Val(2), _nsst_shears(d))
         push!(layout, ShearletIndex{1}(j, c, k))
     end
     return layout
@@ -166,7 +166,7 @@ end
 # The directional subbands of a level share its synthesis mask S_j, so they form
 # one group: the inverse sums them in space and pays one FFT per level.
 function _shearlet_masks(sys::NSSTShearlets, dims::NTuple{2, Int}, ::Type{Tf}) where {Tf}
-    J = length(sys.directions)
+    J = length(sys.direction_levels)
     rd = _rfft_dims(dims)
     a1, gh1, s1 = nsp_responses(sys.pyramid, J, dims[1]; bins = 1:rd[1])
     a2, gh2, s2 = nsp_responses(sys.pyramid, J, dims[2])
@@ -182,7 +182,7 @@ function _shearlet_masks(sys::NSSTShearlets, dims::NTuple{2, Int}, ::Type{Tf}) w
         lvl = J + 1 - j   # pyramid level 1 is the finest
         B = vec(realpart(a1[lvl] .* transpose(a2[lvl]) .* (1 .- gh1[lvl] .* transpose(gh2[lvl]))))
         first = length(ana) + 1
-        s, L = _nsst_shears(sys.directions[j]), sys.filter_size[j]
+        s, L = _nsst_shears(sys.direction_levels[j]), sys.filter_size[j]
         for W in get!(() -> _nsst_shearing_masks(dims, s, L), shearing, (s, L))
             push!(ana, grid(B .* W))
         end

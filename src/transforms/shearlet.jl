@@ -121,7 +121,7 @@ _band(coeffs::AbstractArray, i::Union{Int, UnitRange{Int}}) = selectdim(coeffs, 
 function _forward_into!(coeffs::AbstractArray, x::AbstractArray, ws::ShearletWorkspace, threaded::Bool)
     xin = _engine_input(ws, x)
     if _direct_bands(ws, coeffs)
-        mask_bank_forward!(_Stack(coeffs), xin, ws.engine, threaded)
+        mask_bank_forward!(_Stack(coeffs), xin, ws.engine; threaded)
     else
         mask_bank_stream_forward!((ix, band) -> (copyto!(_band(coeffs, _band_index(ix)), band); nothing), ws.bbuf, xin, ws.engine)
     end
@@ -131,7 +131,7 @@ end
 function _inverse_from!(x::AbstractArray, coeffs::AbstractArray, ws::ShearletWorkspace, threaded::Bool)
     out = _direct(ws, x) ? x : ws.xbuf
     if _direct_bands(ws, coeffs)
-        mask_bank_inverse!(out, _Stack(coeffs), ws.engine, threaded)
+        mask_bank_inverse!(out, _Stack(coeffs), ws.engine; threaded)
     else
         mask_bank_stream_inverse!(ix -> copyto!(ws.bbuf, _band(coeffs, _band_index(ix))), out, ws.engine)
     end

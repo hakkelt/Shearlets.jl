@@ -42,6 +42,16 @@ end
     @test_throws "built for element type Float32" analyze(sys, x; workspace = ws)
     @test_throws "built for data of size" analyze(sys, Float32.(x[:, 1:32]); workspace = ws)
     @test_throws "the workspace was built for" analyze(BandlimitedShearlets(), Float32.(x); workspace = ws)
+    # A streamed band of the wrong size, and real coefficients for complex data,
+    # are rejected before anything is written.
+    let s1 = BandlimitedShearlets(scales = 1), x16 = randn(16, 16)
+        c16 = analyze(s1, x16)
+        for T in (Float64, ComplexF64)
+            cT = T.(c16)
+            @test_throws "returned a band of size (8, 16), expected (16, 16)" synthesize!(i -> cT[1:8, :, i], zeros(T, 16, 16), s1)
+        end
+        @test_throws "complex data need complex coefficients, got Float64" analyze!(zero(c16), s1, complex.(x16, x16))
+    end
     # The streaming forms take `threaded`, and return what the contract says.
     @test analyze((i, b) -> nothing, sys, x; threaded = true) === nothing
     y = similar(x)

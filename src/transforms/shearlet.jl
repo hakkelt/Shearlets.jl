@@ -101,6 +101,8 @@ function MultiscaleTransformsBase.analyze!(
         workspace::Union{ShearletWorkspace, Nothing} = nothing, threaded::Union{Bool, Nothing} = nothing
     )
     _check_host(workspace, x)
+    data_eltype(coeffs) <: Real && data_eltype(x) <: Complex &&
+        throw(ArgumentError("complex data need complex coefficients, got $(eltype(coeffs))"))
     use_threads = _threaded(threaded)
     ws = _workspace(workspace, sys, size(x), data_eltype(x), use_threads)
     _check_coefficients(coeffs, ws)
@@ -213,7 +215,10 @@ function MultiscaleTransformsBase.synthesize!(
     ws = _workspace(workspace, sys, size(x), data_eltype(x), false)
     out = _direct(ws, x) ? x : ws.xbuf
     mask_bank_stream_inverse!(out, ws.engine) do ix
-        band = f(_band_index(ix))
+        i = _band_index(ix)
+        band = f(i)
+        size(band) == ws.dims ||
+            throw(DimensionMismatch("f($(i)) returned a band of size $(size(band)), expected $(ws.dims)"))
         _direct(ws, band) ? band : copyto!(ws.bbuf, band)
     end
     out === x || copyto!(x, out)

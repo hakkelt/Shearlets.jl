@@ -20,9 +20,9 @@ makedocs(;
     format = Documenter.HTML(; canonical = "https://hakkelt.github.io/Shearlets.jl"),
     pages = [
         "Home" => "index.md",
-        "Theory" => "theory.md",
-        "Examples" => "examples.md",
-        "API Reference" => "api.md",
+        "How-to guides" => ["Recipes" => "howto.md", "Examples" => "examples.md"],
+        "Explanation" => "theory.md",
+        "Reference" => "api.md",
     ],
     checkdocs = :exports,
 )

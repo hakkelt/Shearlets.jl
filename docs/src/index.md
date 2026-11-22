@@ -3,21 +3,48 @@
 Translation-invariant discrete shearlet transforms of images and volumes,
 computed on the DFT grid.
 
-```@example index
-using Shearlets
-
-x = randn(256, 256)
-sys = BandlimitedShearlets(scales = 4)        # FFST, a Parseval frame
-c = analyze(sys, x)                           # 256 × 256 × 61
-subband_layout(sys, size(x))[10]              # ShearletIndex(scale = 2, cone = 1, shear = (2,))
-x ≈ synthesize(sys, c)                        # true
-```
+A shearlet system splits an image by scale, like a wavelet, and each scale
+further by orientation, using sheared copies of one generator. Every subband
+then holds the edges of one scale and one direction, so images with curved
+edges are represented more sparsely than by separable wavelets. This helps
+denoising, edge detection and compressed-sensing reconstruction.
 
 ## Installation
 
+Shearlets.jl and its dependencies MultiscaleFilterBanks.jl and
+MultiscaleTransformsBase.jl are not registered yet. Clone the three repositories
+side by side and develop them into your environment:
+
+```bash
+git clone https://github.com/hakkelt/MultiscaleTransformsBase.jl MultiscaleTransformsBase
+git clone https://github.com/hakkelt/MultiscaleFilterBanks.jl MultiscaleFilterBanks
+git clone https://github.com/hakkelt/Shearlets.jl Shearlets
+```
+
 ```julia
 using Pkg
-Pkg.add("Shearlets")
+Pkg.develop([PackageSpec(path = "MultiscaleTransformsBase"),
+             PackageSpec(path = "MultiscaleFilterBanks"),
+             PackageSpec(path = "Shearlets")])
+```
+
+## Quick example
+
+```jldoctest index
+julia> using Shearlets, Random
+
+julia> Random.seed!(1); x = randn(256, 256);
+
+julia> sys = BandlimitedShearlets(scales = 4);   # FFST, a Parseval frame
+
+julia> c = analyze(sys, x); size(c)
+(256, 256, 61)
+
+julia> subband_layout(sys, size(x))[10]
+ShearletIndex(scale = 2, cone = 1, shear = (2,))
+
+julia> x ≈ synthesize(sys, c)
+true
 ```
 
 ## Shearlet systems
@@ -31,48 +58,13 @@ Pkg.add("Shearlets")
 Every subband has the size of the input. Real input gives real subbands;
 complex input is transformed as its real and imaginary parts.
 
-The [theory](@ref theory) page explains the constructions and shows their
-elements and frequency tilings as the papers do; the [examples](@ref examples)
-reproduce the papers' experiments: edge detection, directional selectivity,
-shift invariance, denoising and volumes.
+## Where to go next
 
-## Repeated transforms
-
-```@example index
-ws = make_workspace(sys, x)                    # masks, FFT plans, buffers for data like x
-c = similar_coefficients(sys, x)
-analyze!(c, sys, x; workspace = ws)            # allocation-free
-analyze!(c, ws, x)                             # the same, from the workspace alone
-synthesize!(x, sys, c; workspace = ws)
-```
-
-The subbands are computed in parallel over Julia's threads unless
-`threaded = false`. For data too large to hold every subband,
-`analyze(f, sys, x)` streams them to `f(i, band)` one at a time.
-
-## GPU
-
-The transforms run on GPU backends with an FFT library: CUDA.jl (NVIDIA),
-AMDGPU.jl (AMD) and Metal.jl (Apple silicon, `Float32` only); the test suite
-runs on CUDA. OpenCL.jl is supported but much slower than the CPU, because it
-has no FFT: FFTW runs the FFTs on the CPU on `CLArray`s in shared virtual memory
-(OpenCL.jl's default on devices that support it). Build the workspace from
-device data (the Adapt extension, which loads with any GPU package, moves it there):
-
-```julia
-using CUDA
-xg = CuArray(x)
-ws = make_workspace(sys, xg)
-c = analyze(sys, xg; workspace = ws)
-```
-
-On the device the subbands are transformed in chunks, one batched FFT per chunk,
-which keeps small grids from being bound by kernel launches; the chunk size
-follows from the grid size. `make_workspace(sys, xg; tune = true)` measures the
-fastest chunk size on the device instead, in a fraction of a second once compiled.
-The chunks' stacks and batched FFT plans take up to about 80 MB of device
-memory on top of the coefficients; grids too large to chunk, such as 128³, are
-transformed one subband at a time.
+- [How-to guides](@ref howto): repeated transforms, threading, complex data, GPUs,
+  and the [examples](@ref examples) that reproduce the papers' experiments.
+- [Explanation](@ref theory): the constructions, with figures of their elements
+  and frequency tilings, and the references.
+- [Reference](@ref "API Reference"): every type and function.
 
 ## Related packages
 

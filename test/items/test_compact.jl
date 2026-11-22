@@ -62,6 +62,10 @@ end
     f = copy(CompactShearlets().fan)
     f[1, 1] += 0.1
     @test_throws "fan, the fan filter, must be point-symmetric" CompactShearlets(scales = 1, fan = f)
+    # A frequency covered only to rounding is uncovered: the dual would amplify it.
+    @test_throws "do not cover every frequency" Shearlets._compact_post([1.0, 1.0e-20], (2,), Float32)
+    @test_throws "do not cover every frequency" Shearlets._compact_post([1.0, 1.0e-20], (2,), Float64)
+    @test Shearlets._compact_post([1.0, 0.05], (2,), Float32) ≈ Float32[1, 20]
     @test CompactShearlets() == CompactShearlets()
 end
 

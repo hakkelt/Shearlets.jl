@@ -269,7 +269,10 @@ end
 # The dual frame: the synthesis divides by Ψ̂ = Σ |ψ̂|² over all filters, applied
 # once to the synthesis sum.
 function _compact_post(den::AbstractArray, dims::Tuple, ::Type{Tf}) where {Tf}
-    minimum(den) > 0 || throw(ArgumentError("the shearlet filters do not cover every frequency of a $(dims) grid"))
+    # Relative to the best-covered frequency: a frequency covered only to
+    # rounding would make the dual filters amplify noise without bound.
+    minimum(den) > eps(Tf) * maximum(den) ||
+        throw(ArgumentError("the shearlet filters (qmf, fan) do not cover every frequency of a $(dims) grid: the weakest is covered $(minimum(den) / maximum(den)) times as much as the strongest"))
     return Tf.(1 ./ den)
 end
 

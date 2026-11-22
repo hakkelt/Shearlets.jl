@@ -151,3 +151,16 @@ end
     @test occursin("CompactShearlets(scales = 2, shear_levels = [1, 1])", msg)
     @test length(msg) < 200
 end
+
+@testitem "README examples run" tags = [:interface] begin
+    # Every Julia block of the README, in order, in one module, except the
+    # installation and GPU blocks: an API change that breaks one fails here.
+    readme = read(joinpath(@__DIR__, "..", "..", "README.md"), String)
+    blocks = [m.captures[1] for m in eachmatch(r"```julia\n(.*?)```"s, readme)]
+    runnable = filter(b -> !occursin("Pkg", b) && !occursin("CUDA", b), blocks)
+    @test length(runnable) >= 2
+    mod = Module()
+    for b in runnable
+        @test (include_string(mod, b); true)
+    end
+end

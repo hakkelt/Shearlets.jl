@@ -54,7 +54,7 @@ papers' experiments.
 ## Repeated transforms and multithreading
 
 ```julia
-ws = make_workspace(sys, Float32, size(x))     # masks, FFT plans, buffers
+ws = make_workspace(sys, x)                    # masks, FFT plans, buffers for data like x
 c = similar_coefficients(sys, x)
 analyze!(c, sys, x; workspace = ws)            # allocation-free
 analyze!(c, ws, x)                             # the same, from the workspace alone

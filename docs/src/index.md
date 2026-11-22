@@ -3,7 +3,7 @@
 Translation-invariant discrete shearlet transforms of images and volumes,
 computed on the DFT grid.
 
-```julia
+```@example index
 using Shearlets
 
 x = randn(256, 256)
@@ -38,8 +38,8 @@ shift invariance, denoising and volumes.
 
 ## Repeated transforms
 
-```julia
-ws = make_workspace(sys, Float32, size(x))     # masks, FFT plans, buffers
+```@example index
+ws = make_workspace(sys, x)                    # masks, FFT plans, buffers for data like x
 c = similar_coefficients(sys, x)
 analyze!(c, sys, x; workspace = ws)            # allocation-free
 analyze!(c, ws, x)                             # the same, from the workspace alone

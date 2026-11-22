@@ -49,6 +49,7 @@ end
     @test_throws ArgumentError CompactShearlets(scales = 2, shear_levels = [1])
     @test_throws ArgumentError CompactShearlets(qmf = [0.5, 0.5])
     @test_throws ArgumentError CompactShearlets(fan = ones(2, 3))
+    @test CompactShearlets(scales = 2, shear_levels = (1, 2)) == CompactShearlets(scales = 2, shear_levels = Int32[1, 2])
     # A filter symmetric to rounding is made exactly symmetric and builds a
     # working workspace; a clearly asymmetric one is rejected by name.
     q = copy(CompactShearlets().qmf)

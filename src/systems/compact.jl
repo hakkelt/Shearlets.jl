@@ -68,7 +68,7 @@ of the input.  Spatially compact filters, at the price of a frame that is not
 tight — the inverse uses the dual filters.
 
 - `scales`: number of scales `J`, coarse to fine.
-- `shear_levels`: per scale the level `d`: shears `k = -2^d, …, 2^d` in each
+- `shear_levels`: per scale (any iterable of integers) the level `d`: shears `k = -2^d, …, 2^d` in each
   cone, `2(2^(d+1) + 1)` subbands per scale.  The default is parabolic scaling.
 - `qmf`: the 1-D lowpass of the quadrature mirror pair (symmetric, odd length);
   the highpass is its modulation `(-1)^n h[n]`.  The default is ShearLab's
@@ -119,9 +119,9 @@ struct CompactShearlets <: ShearletSystem
 end
 
 CompactShearlets(;
-    scales::Integer = 4, shear_levels::AbstractVector{<:Integer} = ceil.(Int, (1:scales) ./ 2),
+    scales::Integer = 4, shear_levels = ceil.(Int, (1:scales) ./ 2),
     qmf::AbstractVector{<:Real} = _SHEARLAB_QMF, fan::AbstractMatrix{<:Real} = _maxflat_fan(),
-) = CompactShearlets(scales, shear_levels, qmf, fan)
+) = CompactShearlets(scales, collect(Int, shear_levels), qmf, fan)
 
 function Base.show(io::IO, sys::CompactShearlets)
     print(io, "CompactShearlets(scales = ", sys.scales, ", shear_levels = ")

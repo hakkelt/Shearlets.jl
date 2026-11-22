@@ -31,7 +31,7 @@ split by shearing filters into `2^direction_levels[j]` directional subbands
 (scale `j = 1` is the coarsest).  Every subband has the size of the input.
 
 - `direction_levels`: `log₂` of the number of directional subbands per scale,
-  coarse to fine, each at least `2`: `2^(d-2)` shears per side of each cone,
+  coarse to fine (any iterable of integers), each at least `2`: `2^(d-2)` shears per side of each cone,
   two seam subbands glued across the cones.
 - `filter_size`: the side `L` of the spatial shearing filters, per scale (a vector)
   or for all scales (an integer).  Larger filters resolve directions better near
@@ -76,7 +76,8 @@ struct NSSTShearlets <: ShearletSystem
     end
 end
 
-function NSSTShearlets(; direction_levels::AbstractVector{<:Integer} = [3, 3, 4, 4], filter_size = nothing, pyramid::FilterPair = CDF97)
+function NSSTShearlets(; direction_levels = [3, 3, 4, 4], filter_size = nothing, pyramid::FilterPair = CDF97)
+    direction_levels = collect(Int, direction_levels)
     J = length(direction_levels)
     sizes = filter_size === nothing ? [j > J - 2 ? 16 : 32 for j in 1:J] :
         filter_size isa Integer ? fill(Int(filter_size), J) : collect(Int, filter_size)

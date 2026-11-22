@@ -67,8 +67,9 @@ FFT. The pieces:
   the streaming forms, coefficient accessors) and `shearlet_spectra`.
 - `ext/ShearletsAdaptExt.jl` — the GPU path: `Adapt.adapt_structure` (the
   masks moved, the engine rebuilt with batched plans: chunks of subbands per
-  FFT) and the device routing of `make_workspace(sys, x)`. Adapt is a dependency of
-  MultiscaleTransformsBase, so the extension always loads.
+  FFT) and the device routing of `make_workspace(sys, x)`. The extension loads
+  with Adapt, a weak dependency here and of MultiscaleTransformsBase, which
+  every GPU package loads.
 
 ## Invariants
 

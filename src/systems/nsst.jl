@@ -36,7 +36,9 @@ split by shearing filters into `2^direction_levels[j]` directional subbands
 - `filter_size`: the side `L` of the spatial shearing filters, per scale (a vector)
   or for all scales (an integer).  Larger filters resolve directions better near
   the origin; smaller ones are more local.  `0` samples the windows on the
-  image's own DFT grid (the frequency-domain variant).  The default is `32` for
+  image's own DFT grid (the frequency-domain variant).  `L` is clamped to each
+  side of the image, so an `L` at least as large as both sides is the
+  frequency-domain variant too.  The default is `32` for
   the scales coarser than the two finest, which use `16`.
 - `pyramid`: the 1-D filter pair of the à trous pyramid; it must be symmetric
   with an odd number of taps.

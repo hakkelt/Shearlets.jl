@@ -57,7 +57,7 @@ AMDGPU.jl (AMD) and Metal.jl (Apple silicon, `Float32` only); the test suite
 runs on CUDA. OpenCL.jl is supported but much slower than the CPU, because it
 has no FFT: FFTW runs the FFTs on the CPU on `CLArray`s in shared virtual memory
 (OpenCL.jl's default on devices that support it). Build the workspace from
-device data (the Adapt extension, loaded with the interface, moves it there):
+device data (the Adapt extension, which loads with any GPU package, moves it there):
 
 ```julia
 using CUDA

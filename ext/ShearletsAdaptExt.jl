@@ -20,7 +20,7 @@ module ShearletsAdaptExt
 # library has batched plans.
 
 using Shearlets: Shearlets, ShearletWorkspace, _MaskSet, _ProductMask
-using MultiscaleFilterBanks: SparseMask
+using MultiscaleFilterBanks: SparseMask, storage_array
 using Adapt: Adapt
 using FFTW: FFTW, plan_rfft, plan_brfft
 
@@ -73,6 +73,6 @@ end
 
 Adapt.adapt_storage(to::_Like, a::AbstractArray) = copyto!(similar(to.proto, eltype(a), size(a)), a)
 
-Shearlets._to_device(ws::ShearletWorkspace, x::AbstractArray) = Adapt.adapt(_Like(Shearlets.storage_array(x)), ws)
+Shearlets._to_device(ws::ShearletWorkspace, x::AbstractArray) = Adapt.adapt(_Like(storage_array(x)), ws)
 
 end # module ShearletsAdaptExt

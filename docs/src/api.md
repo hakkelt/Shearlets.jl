@@ -40,7 +40,7 @@ synthesize!(::AbstractArray{<:Number}, ::ShearletSystem, ::AbstractArray{<:Numbe
 analyze(::Any, ::ShearletSystem, ::AbstractArray{<:Number})
 synthesize!(::Any, ::AbstractArray{<:Number}, ::ShearletSystem)
 ShearletWorkspace
-make_workspace(::ShearletSystem, ::Type{<:Number}, ::Dims)
+make_workspace(::ShearletSystem, ::Type{T}, ::Dims) where {T <: Number}
 make_workspace(::ShearletSystem, ::AbstractArray)
 ```
 

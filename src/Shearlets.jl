@@ -41,7 +41,7 @@ using MultiscaleTransformsBase: MultiscaleTransformsBase, AbstractMultiscaleTran
 using MultiscaleFilterBanks: MultiscaleFilterBanks,
     FilterPair, CDF97, upsample_filter,
     data_eltype, loop_threaded, with_fftw_threads, nsp_responses, DEFAULT_CHUNK_SAMPLES,
-    is_device_array, storage_array,
+    is_device_array,
     MaskBankEngine, MaskBank, MaskItem, SparseMask, IdentityMask, mask_apply!,
     mask_bank_forward!, mask_bank_inverse!, mask_bank_stream_forward!, mask_bank_stream_inverse!, mask_bank_tune
 

@@ -55,6 +55,10 @@ _nsubbands(ws::ShearletWorkspace) = length(ws.engine.items)
 # Whether a call threads: asked to, and not inside a caller's NestedThreading budget.
 _threaded(threaded::Union{Bool, Nothing}) = loop_threaded(threaded !== false)
 
+# Sizes of any integer type.
+MultiscaleTransformsBase.make_workspace(sys::ShearletSystem, ::Type{T}, dims::Tuple{Vararg{Integer}}; kwargs...) where {T <: Number} =
+    make_workspace(sys, T, map(Int, dims); kwargs...)
+
 """
     make_workspace(system::ShearletSystem, T::Type{<:Number}, dims::Dims;
                    flags = FFTW.MEASURE, tasks = nothing, tune = false, prewarm = false) -> ShearletWorkspace
@@ -74,9 +78,6 @@ type `T` (real or complex; integers count as `float(T)`) and size `dims`.
   allocates no more than later calls, so prewarming only moves the one-time
   compilation of a method from the first call to the construction.
 """
-MultiscaleTransformsBase.make_workspace(sys::ShearletSystem, ::Type{T}, dims::Tuple{Vararg{Integer}}; kwargs...) where {T <: Number} =
-    make_workspace(sys, T, map(Int, dims); kwargs...)
-
 function MultiscaleTransformsBase.make_workspace(
         sys::ShearletSystem, ::Type{T}, dims::Dims; flags::Integer = FFTW.MEASURE,
         tasks::Union{Integer, Nothing} = nothing, tune::Bool = false, prewarm::Bool = false

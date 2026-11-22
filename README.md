@@ -131,4 +131,4 @@ AI model, under the direction of the author.
 
 ## License
 
-MIT; see [`LICENSE`](LICENSE).
+MIT; see [`LICENSE`](LICENSE). Third-party notices are in [`NOTICE`](NOTICE).

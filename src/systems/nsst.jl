@@ -119,8 +119,11 @@ function MultiscaleTransformsBase.subband_layout(sys::NSSTShearlets, ::NTuple{2,
     return layout
 end
 
-MultiscaleTransformsBase.subband_layout(::NSSTShearlets, dims::Tuple) =
+# Sizes of any integer type are converted; any other size is an error.
+function MultiscaleTransformsBase.subband_layout(sys::NSSTShearlets, dims::Tuple)
+    dims isa Tuple{Vararg{Integer}} && !(dims isa Tuple{Vararg{Int}}) && return subband_layout(sys, map(Int, dims))
     throw(ArgumentError("the NSST supports 2-D data only, got size $(dims)"))
+end
 
 # The shearing filters of one scale as masks on the `rfft` grid of `dims`
 # (vectors over its linear indices), from windows sampled on an L × L grid.

@@ -51,6 +51,13 @@ end
             @test_throws "returned a band of size (8, 16), expected (16, 16)" synthesize!(i -> cT[1:8, :, i], zeros(T, 16, 16), s1)
         end
         @test_throws "complex data need complex coefficients, got Float64" analyze!(zero(c16), s1, complex.(x16, x16))
+        # Sizes of any integer type.
+        d32 = (Int32(16), Int32(16))
+        for sys in (s1, NSSTShearlets(direction_levels = [2]), CompactShearlets(scales = 1))
+            @test subband_layout(sys, d32) == subband_layout(sys, (16, 16))
+        end
+        @test size(make_workspace(s1, Float64, d32)) == (16, 16)
+        @test_throws "support 2-D and 3-D data" subband_layout(s1, (Int32(4), Int32(4), Int32(4), Int32(4)))
         # Host arrays that are not `Array`s (a range, a BitMatrix) stay on the host.
         r = reshape(1.0:256.0, 16, 16)
         b = x16 .> 0

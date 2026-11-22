@@ -129,8 +129,11 @@ function MultiscaleTransformsBase.subband_layout(sys::BandlimitedShearlets, dims
     return layout
 end
 
-MultiscaleTransformsBase.subband_layout(::BandlimitedShearlets, dims::Tuple) =
+# Sizes of any integer type are converted; any other size is an error.
+function MultiscaleTransformsBase.subband_layout(sys::BandlimitedShearlets, dims::Tuple)
+    dims isa Tuple{Vararg{Integer}} && !(dims isa Tuple{Vararg{Int}}) && return subband_layout(sys, map(Int, dims))
     throw(ArgumentError("band-limited shearlets support 2-D and 3-D data, got size $(dims)"))
+end
 
 # Radial windows and lowpass at ω (in the units above).
 function _bl_radial(sys::BandlimitedShearlets, ω::NTuple{N, Float64}, j::Int) where {N}

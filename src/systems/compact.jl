@@ -153,8 +153,11 @@ function MultiscaleTransformsBase.subband_layout(sys::CompactShearlets, dims::NT
     return layout
 end
 
-MultiscaleTransformsBase.subband_layout(::CompactShearlets, dims::Tuple) =
+# Sizes of any integer type are converted; any other size is an error.
+function MultiscaleTransformsBase.subband_layout(sys::CompactShearlets, dims::Tuple)
+    dims isa Tuple{Vararg{Integer}} && !(dims isa Tuple{Vararg{Int}}) && return subband_layout(sys, map(Int, dims))
     throw(ArgumentError("compactly supported shearlets support 2-D and 3-D data, got size $(dims)"))
+end
 
 # ── Centered filter algebra ────────────────────────────────────────────────────
 # Filters are arrays with odd sides and the origin at the center.

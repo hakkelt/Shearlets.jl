@@ -130,6 +130,7 @@ function MultiscaleTransformsBase.make_workspace(
         sys::ShearletSystem, x::AbstractArray; flags::Integer = FFTW.MEASURE,
         tasks::Union{Integer, Nothing} = nothing, tune::Bool = false, prewarm::Bool = false
     )
+    Base.require_one_based_indexing(x)
     _on_host(x) && return make_workspace(sys, eltype(x), size(x); flags, tasks, tune, prewarm)
     _check_tasks(tasks)
     # The device engine is rebuilt from the host workspace's masks, so its host
@@ -259,8 +260,14 @@ _plannable_bands(ws::ShearletWorkspace, coeffs::AbstractArray) =
 
 # `x` as the engine reads it: complex data through broadcasts, real data
 # through the plans, staged in `ws.xbuf` when they cannot take it.
-_engine_input(ws::ShearletWorkspace{<:Complex}, x::AbstractArray) = x
-_engine_input(ws::ShearletWorkspace{<:Real}, x::AbstractArray) = _plannable(ws, x) ? x : copyto!(ws.xbuf, x)
+function _engine_input(ws::ShearletWorkspace{<:Complex}, x::AbstractArray)
+    Base.require_one_based_indexing(x)
+    return x
+end
+function _engine_input(ws::ShearletWorkspace{<:Real}, x::AbstractArray)
+    Base.require_one_based_indexing(x)
+    return _plannable(ws, x) ? x : copyto!(ws.xbuf, x)
+end
 
 # Whether the engine writes the output `x` (or the subbands `coeffs`) itself.
 _direct(ws::ShearletWorkspace{<:Complex}, a::AbstractArray) = true

@@ -103,6 +103,7 @@ struct CompactShearlets <: ShearletSystem
     qmf::Vector{Float64}
     fan::Matrix{Float64}
     function CompactShearlets(scales::Integer, shear_levels::AbstractVector{<:Integer}, qmf::AbstractVector{<:Real}, fan::AbstractMatrix{<:Real})
+        Base.require_one_based_indexing(qmf, fan)
         scales >= 1 || throw(ArgumentError("need at least one scale, got $(scales)"))
         length(shear_levels) == scales ||
             throw(ArgumentError("need one shear level per scale, got $(length(shear_levels)) for $(scales) scales"))

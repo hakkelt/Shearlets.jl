@@ -39,10 +39,12 @@ MultiscaleTransformsBase.subband(::ShearletSystem, c::AbstractArray, i::Integer)
 
 Uninitialized coefficients of `system` for data like `x`: an array like `x`
 (host or device) of element type `float(eltype(x))` and size
-`(size(x)..., nsubbands(system, size(x)))`.
+`(size(x)..., nsubbands(system, size(x)))`.  `x` must be indexed from 1.
 """
-MultiscaleTransformsBase.similar_coefficients(sys::ShearletSystem, x::AbstractArray) =
-    similar(x, data_eltype(x), (size(x)..., nsubbands(sys, size(x))))
+function MultiscaleTransformsBase.similar_coefficients(sys::ShearletSystem, x::AbstractArray)
+    Base.require_one_based_indexing(x)
+    return similar(x, data_eltype(x), (size(x)..., nsubbands(sys, size(x))))
+end
 
 MultiscaleTransformsBase.signal_size(::ShearletSystem, c::AbstractArray) = Base.front(size(c))
 
@@ -56,7 +58,8 @@ invariant under circular shifts of `x`; real input gives real subbands, and
 complex input is transformed as its real and imaginary parts, so
 `analyze(system, complex.(a, b)) == complex.(analyze(system, a), analyze(system, b))`
 exactly.  The subbands are computed in parallel unless `threaded = false`
-(`nothing` threads).
+(`nothing` threads).  The data, and every coefficient and output array of the
+transforms below, must be indexed from 1 (an `ArgumentError` otherwise).
 
 `workspace` is a [`ShearletWorkspace`](@ref) for this system, element type and
 size; device data needs one (see
@@ -82,6 +85,7 @@ function MultiscaleTransformsBase.analyze(
         sys::ShearletSystem, x::AbstractArray{<:Number};
         workspace::Union{ShearletWorkspace, Nothing} = nothing, threaded::Union{Bool, Nothing} = nothing
     )
+    Base.require_one_based_indexing(x)
     _check_host(workspace, x)
     Td = data_eltype(x)
     ws = _workspace(workspace, sys, size(x), Td, _threaded(threaded))
@@ -99,6 +103,7 @@ function MultiscaleTransformsBase.analyze!(
         coeffs::AbstractArray{<:Number}, sys::ShearletSystem, x::AbstractArray{<:Number};
         workspace::Union{ShearletWorkspace, Nothing} = nothing, threaded::Union{Bool, Nothing} = nothing
     )
+    Base.require_one_based_indexing(coeffs, x)
     _check_host(workspace, x)
     data_eltype(coeffs) <: Real && data_eltype(x) <: Complex &&
         throw(ArgumentError("complex data need complex coefficients, got $(eltype(coeffs))"))
@@ -154,6 +159,7 @@ function MultiscaleTransformsBase.analyze(
         f, sys::ShearletSystem, x::AbstractArray{<:Number};
         workspace::Union{ShearletWorkspace, Nothing} = nothing, threaded::Union{Bool, Nothing} = nothing
     )
+    Base.require_one_based_indexing(x)
     _check_host(workspace, x)
     ws = _workspace(workspace, sys, size(x), data_eltype(x), false)
     mask_bank_stream_forward!((ix, band) -> (f(_band_index(ix), band); nothing), ws.bbuf, _engine_input(ws, x), ws.engine)
@@ -172,6 +178,7 @@ function MultiscaleTransformsBase.synthesize(
         sys::ShearletSystem, coeffs::AbstractArray{<:Number};
         workspace::Union{ShearletWorkspace, Nothing} = nothing, threaded::Union{Bool, Nothing} = nothing
     )
+    Base.require_one_based_indexing(coeffs)
     x = similar(coeffs, data_eltype(coeffs), signal_size(sys, coeffs))
     return synthesize!(x, sys, coeffs; workspace, threaded)
 end
@@ -186,6 +193,7 @@ function MultiscaleTransformsBase.synthesize!(
         x::AbstractArray{<:Number}, sys::ShearletSystem, coeffs::AbstractArray{<:Number};
         workspace::Union{ShearletWorkspace, Nothing} = nothing, threaded::Union{Bool, Nothing} = nothing
     )
+    Base.require_one_based_indexing(x, coeffs)
     _check_host(workspace, x)
     _check_host(workspace, coeffs)
     data_eltype(x) <: Real && data_eltype(coeffs) <: Complex &&
@@ -210,12 +218,14 @@ function MultiscaleTransformsBase.synthesize!(
         f, x::AbstractArray{<:Number}, sys::ShearletSystem;
         workspace::Union{ShearletWorkspace, Nothing} = nothing, threaded::Union{Bool, Nothing} = nothing
     )
+    Base.require_one_based_indexing(x)
     _check_host(workspace, x)
     ws = _workspace(workspace, sys, size(x), data_eltype(x), false)
     out = _direct(ws, x) ? x : ws.xbuf
     mask_bank_stream_inverse!(out, ws.engine) do ix
         i = _band_index(ix)
         band = f(i)
+        Base.require_one_based_indexing(band)
         size(band) == ws.dims ||
             throw(DimensionMismatch("f($(i)) returned a band of size $(size(band)), expected $(ws.dims)"))
         _direct(ws, band) ? band : copyto!(ws.bbuf, band)

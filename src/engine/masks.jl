@@ -60,6 +60,11 @@ function _product_loop!(op::O, Zr, m::_ProductMask, Yr, s) where {O}
     f1, f2 = m.f1, m.f2
     size(f2, 1) == 1 && size(f1, 1) != 1 && return _product_loop!(op, Zr, _ProductMask(f2, f1), Yr, s)
     _, n1, n2, n3 = size(Zr)
+    # The unchecked loop reads Yr at Zr's indices and each factor along an axis
+    # of the grid's length or a singleton one.
+    fits(f) = all(d -> size(f, d) in (1, size(Zr, d + 1)), 1:3)
+    size(Yr) == size(Zr) && fits(f1) && fits(f2) ||
+        throw(DimensionMismatch("product mask: factors of sizes $(size(f1)) and $(size(f2)) or a spectrum of size $(size(Yr)[2:end]) do not fit the grid $((n1, n2, n3))"))
     sq(f, d, i) = size(f, d) == 1 ? 1 : i
     @inbounds for k in 1:n3, j in 1:n2
         j1, k1, j2, k2 = sq(f1, 2, j), sq(f1, 3, k), sq(f2, 2, j), sq(f2, 3, k)

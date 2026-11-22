@@ -88,6 +88,16 @@ On 3-D data the cones are the three pyramids around the axes and a shearlet has
 a shear `(k₁, k₂)` against each of the other two axes, `3(2^(d+1) + 1)²`
 subbands per scale (ShearLab 3D's Definitions 3.3–3.4).
 
+# Examples
+```jldoctest
+julia> using Shearlets
+
+julia> sys = CompactShearlets(scales = 2);
+
+julia> nsubbands(sys, (64, 64))   # lowpass, 10 subbands per scale
+21
+```
+
 # References
 1. G. Kutyniok, W.-Q. Lim, and R. Reisenhofer, "ShearLab 3D: Faithful Digital
    Shearlet Transforms Based on Compactly Supported Shearlets", *ACM Transactions

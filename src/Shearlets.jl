@@ -1,8 +1,8 @@
 """
     Shearlets
 
-Discrete shearlet transforms of images, translation invariant and computed on
-the DFT grid.
+Discrete shearlet transforms of images and volumes, translation invariant and
+computed on the DFT grid.
 
 ## Quick reference
 
@@ -22,7 +22,7 @@ Shearlet systems:
 - [`BandlimitedShearlets`](@ref): Häuser & Steidl's FFST, band-limited Meyer
   shearlets, a Parseval frame;
 - [`NSSTShearlets`](@ref): Easley, Labate & Lim's nonsubsampled shearlet
-  transform, an à trous pyramid with shearing filters;
+  transform, an à trous pyramid with shearing filters (2-D data only);
 - [`CompactShearlets`](@ref): ShearLab 3D's compactly supported digital
   shearlets, with dual-frame reconstruction.
 

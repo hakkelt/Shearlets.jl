@@ -47,6 +47,17 @@ the three pyramids around the axes).
 Every subband has the size of the input; real input gives real subbands.
 `show` prints the keyword call that rebuilds the system.
 
+# Examples
+```jldoctest
+julia> using Shearlets
+
+julia> sys = BandlimitedShearlets(scales = 2)
+BandlimitedShearlets(scales = 2, smooth = false, alpha = 1.0)
+
+julia> nsubbands(sys, (64, 64))   # lowpass, 4 shearlets at scale 1, 8 at scale 2
+13
+```
+
 # References
 1. S. Häuser and G. Steidl, "Fast Finite Shearlet Transform: a tutorial",
    2012.

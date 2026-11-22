@@ -28,11 +28,13 @@
 The nonsubsampled shearlet transform (NSST) of Easley, Labate & Lim (2008): a
 nonsubsampled Laplacian pyramid with `length(direction_levels)` levels, each
 split by shearing filters into `2^direction_levels[j]` directional subbands
-(scale `j = 1` is the coarsest).  Every subband has the size of the input.
+(scale `j = 1` is the coarsest).  Every subband has the size of the input.  The
+system is defined for 2-D data only; other dimensions throw an `ArgumentError`.
 
 - `direction_levels`: `log₂` of the number of directional subbands per scale,
-  coarse to fine (any iterable of integers), each at least `2`: `2^(d-2)` shears per side of each cone,
-  two seam subbands glued across the cones.
+  coarse to fine (any iterable of integers), each at least `2`: a scale with
+  `d` levels has `2^(d-2)` shears per side of each cone and two seam subbands
+  glued across the cones.
 - `filter_size`: the side `L` of the spatial shearing filters, per scale (a vector)
   or for all scales (an integer).  Larger filters resolve directions better near
   the origin; smaller ones are more local.  `0` samples the windows on the
@@ -50,6 +52,17 @@ level and inverts the pyramid.
 when it is `CDF97`.  A pyramid filter of more than 32 taps prints as its size
 and element type, which does not parse back; the `text/plain` display adds its
 taps.
+
+# Examples
+```jldoctest
+julia> using Shearlets
+
+julia> sys = NSSTShearlets(direction_levels = [2, 3], filter_size = 0)
+NSSTShearlets(direction_levels = [2, 3], filter_size = [0, 0])
+
+julia> nsubbands(sys, (64, 64))   # lowpass, 2^2 and 2^3 directional subbands
+13
+```
 
 # References
 1. G. Easley, D. Labate, and W.-Q. Lim, "Sparse Directional Image Representations

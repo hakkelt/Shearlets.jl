@@ -17,7 +17,20 @@ subband is glued across the seam and listed under the lower cone.
     ShearletIndex(; scale, cone, shear)
 
 The index with these fields, `M = length(shear)`; this is also the form `show`
-prints.
+prints.  `subband_layout(system, dims)` lists the indices of a system's subbands.
+
+# Examples
+```jldoctest
+julia> using Shearlets
+
+julia> layout = subband_layout(BandlimitedShearlets(scales = 1), (32, 32));
+
+julia> layout[1], layout[2]
+(ShearletIndex(scale = 0, cone = 0, shear = (0,)), ShearletIndex(scale = 1, cone = 1, shear = (-1,)))
+
+julia> islowpass(layout[1])
+true
+```
 """
 struct ShearletIndex{M}
     scale::Int

@@ -96,8 +96,11 @@ end
 """
     analyze!(c, system::ShearletSystem, x; workspace = nothing, threaded = nothing) -> c
 
-In-place [`analyze`](@ref analyze(::ShearletSystem, ::AbstractArray{<:Number})).  With a
-`workspace` it allocates nothing but the threads' tasks.
+In-place [`analyze`](@ref analyze(::ShearletSystem, ::AbstractArray{<:Number})): writes the
+coefficients of `x` into `c`, which must have size `(size(x)..., n)` and a
+complex element type when `x` is complex (`DimensionMismatch` and
+`ArgumentError` otherwise).  With a `workspace` it allocates nothing but the
+threads' tasks.
 """
 function MultiscaleTransformsBase.analyze!(
         coeffs::AbstractArray{<:Number}, sys::ShearletSystem, x::AbstractArray{<:Number};
@@ -172,7 +175,9 @@ end
 Invert [`analyze`](@ref analyze(::ShearletSystem, ::AbstractArray{<:Number})): the array of
 size `size(c)[1:end-1]` and element type `float(eltype(c))` whose transform is
 `c`.  For a Parseval system such as [`BandlimitedShearlets`](@ref) this is
-also the adjoint of the forward transform; the others are dual frames.
+also the adjoint of the forward transform; the others are dual frames.  Complex
+coefficients give a complex result.  `workspace` and `threaded` are those of
+[`analyze`](@ref analyze(::ShearletSystem, ::AbstractArray{<:Number})).
 """
 function MultiscaleTransformsBase.synthesize(
         sys::ShearletSystem, coeffs::AbstractArray{<:Number};
@@ -186,7 +191,9 @@ end
 """
     synthesize!(x, system::ShearletSystem, c; workspace = nothing, threaded = nothing) -> x
 
-In-place [`synthesize`](@ref synthesize(::ShearletSystem, ::AbstractArray{<:Number})).
+In-place [`synthesize`](@ref synthesize(::ShearletSystem, ::AbstractArray{<:Number})): writes
+the inverse of `c` into `x`, of size `size(c)[1:end-1]` and a complex element
+type when `c` is complex (`DimensionMismatch` and `ArgumentError` otherwise).
 With a `workspace` and `threaded = false` it allocates nothing.
 """
 function MultiscaleTransformsBase.synthesize!(
@@ -243,7 +250,20 @@ The frequency responses of all subbands of `system`, of the real element type
 
 With `synthesis = true`, the masks the inverse applies instead: `x` is
 `real(ifft(sum(spectra .* fft(subbands))))`.  For a Parseval system the two
-are equal.
+are equal.  `dims` has 2 or 3 entries (2 for `NSSTShearlets`).
+
+# Examples
+```jldoctest
+julia> using Shearlets
+
+julia> spectra = shearlet_spectra(BandlimitedShearlets(scales = 1), (32, 32));
+
+julia> size(spectra)
+(32, 32, 5)
+
+julia> sum(abs2, spectra; dims = 3) ≈ ones(32, 32)   # a Parseval frame
+true
+```
 """
 shearlet_spectra(sys::ShearletSystem, dims::Tuple; synthesis::Bool = false) = shearlet_spectra(sys, Float64, dims; synthesis)
 

@@ -70,13 +70,10 @@ type `T` (real or complex; integers count as `float(T)`) and size `dims`.
 - `tasks`: the most tasks a call with the workspace threads its subbands over,
   each with its own FFT buffers; `nothing` is one per Julia thread, `1` a
   serial workspace (whatever `threaded` a call passes).  At least 1.
-- `tune`: ignored (it tunes device workspaces; a host workspace threads over
-  subbands instead).
+- `tune`: ignored on the host (it tunes device workspaces).
 - `prewarm`: run one analysis and one synthesis on zeros at construction, so
   that the first call does not compile.  It costs a transform and, meanwhile,
-  a full coefficient array.  Off by default: a workspace's first call already
-  allocates no more than later calls, so prewarming only moves the one-time
-  compilation of a method from the first call to the construction.
+  a full coefficient array.
 """
 function MultiscaleTransformsBase.make_workspace(
         sys::ShearletSystem, ::Type{T}, dims::Dims; flags::Integer = FFTW.MEASURE,
@@ -108,14 +105,10 @@ times one subband at a time and chunks of powers of two subbands, each with the
 synthesis chunked or not, on a forward and an inverse transform, and keeps the
 default unless another is 5% faster.  Tuning holds a coefficient array and the
 stacks of one more chunk size on the device meanwhile; the transform itself is
-unchanged.  On an A100 (Float32 and ComplexF32) it pays off only for the
-`NSSTShearlets`: at 256² and 512² it adds 40–280 ms to the construction and
-makes the analysis 10–45% and the synthesis 1.2–3.4× faster, which repays
-the construction after about 230–660 analysis–synthesis pairs.  For the
-`BandlimitedShearlets` and `CompactShearlets` (2-D and 3-D) the default
-chunking already measures best, and tuning only adds 0.1–4.4 s to the
-construction.  On the host `tune` does nothing: a host workspace threads
-over subbands instead.
+unchanged.  Tuning pays off mainly for `NSSTShearlets`; for the other systems
+the default chunking is usually as fast, and tuning only lengthens the
+construction.  On the host `tune` does nothing: a host workspace threads over
+subbands instead.
 
 On a device `flags` and `tasks` are ignored (`tasks` is still checked to be at
 least 1): the device FFT library plans the FFTs, and the device engine runs in

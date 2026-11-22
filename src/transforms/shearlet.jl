@@ -15,10 +15,9 @@ function _check_host(workspace, x::AbstractArray)
     return nothing
 end
 
-# Whether `x` is stored in a host `Array` (views, transposes and reshapes of one
-# included).
-_on_host(x::Array) = true
-_on_host(x::AbstractArray) = (p = parent(x); p !== x && _on_host(p))
+# Whether the data of `x` lives on the host: any array but a device array (or a
+# wrapper of one), BitArrays, ranges and sparse arrays included.
+_on_host(x::AbstractArray) = !is_device_array(x)
 
 function _check_coefficients(coeffs::AbstractArray, ws::ShearletWorkspace)
     size(coeffs) == _coefficient_size(ws) ||

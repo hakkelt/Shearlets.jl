@@ -51,6 +51,12 @@ end
             @test_throws "returned a band of size (8, 16), expected (16, 16)" synthesize!(i -> cT[1:8, :, i], zeros(T, 16, 16), s1)
         end
         @test_throws "complex data need complex coefficients, got Float64" analyze!(zero(c16), s1, complex.(x16, x16))
+        # Host arrays that are not `Array`s (a range, a BitMatrix) stay on the host.
+        r = reshape(1.0:256.0, 16, 16)
+        b = x16 .> 0
+        @test analyze(s1, r) ≈ analyze(s1, collect(r))
+        @test analyze(s1, b) ≈ analyze(s1, Float64.(b))
+        @test make_workspace(s1, b) isa Shearlets.ShearletWorkspace
     end
     # The streaming forms take `threaded`, and return what the contract says.
     @test analyze((i, b) -> nothing, sys, x; threaded = true) === nothing

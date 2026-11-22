@@ -73,8 +73,6 @@ end
 
 Adapt.adapt_storage(to::_Like, a::AbstractArray) = copyto!(similar(to.proto, eltype(a), size(a)), a)
 
-_storage(x::AbstractArray) = (p = parent(x); p === x ? x : _storage(p))
-
-Shearlets._to_device(ws::ShearletWorkspace, x::AbstractArray) = Adapt.adapt(_Like(_storage(x)), ws)
+Shearlets._to_device(ws::ShearletWorkspace, x::AbstractArray) = Adapt.adapt(_Like(Shearlets.storage_array(x)), ws)
 
 end # module ShearletsAdaptExt

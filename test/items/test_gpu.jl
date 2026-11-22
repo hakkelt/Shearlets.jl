@@ -34,6 +34,8 @@ end
             # A workspace made from device data lives on its device.
             wd = make_workspace(sys, xg)
             @test wd.xbuf isa typeof(xg).name.wrapper
+            # So does one made from a view of device data.
+            @test make_workspace(sys, view(xg, axes(xg)...)).xbuf isa typeof(xg).name.wrapper
             @test maximum(abs, Array(analyze(wd, xg)) .- ref) < 1.0f-4 * maximum(abs, ref)
             # `flags` and `tasks` are ignored on a device; `prewarm` runs there.
             wp = make_workspace(sys, xg; flags = Shearlets.FFTW.ESTIMATE, tasks = 1, tune = false, prewarm = true)

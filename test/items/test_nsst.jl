@@ -65,6 +65,13 @@ end
     @test_throws ArgumentError NSSTShearlets(direction_levels = [1, 3])
     @test_throws ArgumentError NSSTShearlets(direction_levels = [2, 3], filter_size = [16])
     @test_throws ArgumentError NSSTShearlets(pyramid = FilterPair([0.5, 0.5], [1.0, 1.0]))
+    @test_throws "pyramid.g must be symmetric" NSSTShearlets(pyramid = FilterPair([0.25, 0.5, 0.25], [0.5, 1.0, 0.6]))
+    h = collect(CDF97.h)
+    h[1] += 1.0e-9
+    s = NSSTShearlets(direction_levels = [2], pyramid = FilterPair(h, collect(CDF97.g)))
+    @test s.pyramid.h == reverse(s.pyramid.h)
+    x = randn(32, 32)
+    @test synthesize(s, analyze(s, x)) ≈ x
     @test NSSTShearlets(direction_levels = [2, 3, 4, 4]).filter_size == [32, 32, 16, 16]
     @test NSSTShearlets() == NSSTShearlets()
     @test hash(NSSTShearlets()) == hash(NSSTShearlets())

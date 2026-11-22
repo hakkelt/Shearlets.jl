@@ -108,10 +108,13 @@ struct CompactShearlets <: ShearletSystem
             throw(ArgumentError("need one shear level per scale, got $(length(shear_levels)) for $(scales) scales"))
         all(>=(0), shear_levels) || throw(ArgumentError("shear levels must be non-negative"))
         (isodd(length(qmf)) && qmf ≈ reverse(qmf)) ||
-            throw(ArgumentError("the quadrature mirror filter must be symmetric with an odd number of taps"))
+            throw(ArgumentError("qmf, the quadrature mirror filter, must be symmetric with an odd number of taps"))
         (all(isodd, size(fan)) && fan ≈ reverse(fan)) ||
-            throw(ArgumentError("the fan filter must be point-symmetric with odd sides"))
-        return new(Int(scales), Vector{Int}(shear_levels), Vector{Float64}(qmf), Matrix{Float64}(fan))
+            throw(ArgumentError("fan, the fan filter, must be point-symmetric with odd sides"))
+        # Symmetric to rounding is made exact: the masks are real only for
+        # exactly symmetric filters.
+        q, f = Vector{Float64}(qmf), Matrix{Float64}(fan)
+        return new(Int(scales), Vector{Int}(shear_levels), (q .+ reverse(q)) ./ 2, (f .+ reverse(f)) ./ 2)
     end
 end
 

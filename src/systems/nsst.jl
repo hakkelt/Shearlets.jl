@@ -65,11 +65,14 @@ struct NSSTShearlets <: ShearletSystem
         length(filter_size) == length(direction_levels) ||
             throw(ArgumentError("need one filter size per level, got $(length(filter_size)) for $(length(direction_levels)) levels"))
         all(>=(0), filter_size) || throw(ArgumentError("filter sizes must be non-negative"))
-        for f in (pyramid.h, pyramid.g)
+        for (name, f) in (("h", pyramid.h), ("g", pyramid.g))
             (isodd(length(f)) && f ≈ reverse(f)) ||
-                throw(ArgumentError("the pyramid filters must be symmetric with an odd number of taps"))
+                throw(ArgumentError("pyramid.$(name) must be symmetric with an odd number of taps"))
         end
-        return new(Vector{Int}(direction_levels), Vector{Int}(filter_size), FilterPair{Float64}(pyramid.h, pyramid.g))
+        # Symmetric to rounding is made exact: the pyramid responses are real
+        # only for exactly symmetric filters.
+        sym(f) = (h = Vector{Float64}(f); (h .+ reverse(h)) ./ 2)
+        return new(Vector{Int}(direction_levels), Vector{Int}(filter_size), FilterPair{Float64}(sym(pyramid.h), sym(pyramid.g)))
     end
 end
 

@@ -49,6 +49,19 @@ end
     @test_throws ArgumentError CompactShearlets(scales = 2, shear_levels = [1])
     @test_throws ArgumentError CompactShearlets(qmf = [0.5, 0.5])
     @test_throws ArgumentError CompactShearlets(fan = ones(2, 3))
+    # A filter symmetric to rounding is made exactly symmetric and builds a
+    # working workspace; a clearly asymmetric one is rejected by name.
+    q = copy(CompactShearlets().qmf)
+    q[1] += 1.0e-9
+    s = CompactShearlets(scales = 1, qmf = q)
+    @test s.qmf == reverse(s.qmf)
+    x = randn(32, 32)
+    @test synthesize(s, analyze(s, x)) ≈ x
+    q[1] += 0.1
+    @test_throws "qmf, the quadrature mirror filter, must be symmetric" CompactShearlets(scales = 1, qmf = q)
+    f = copy(CompactShearlets().fan)
+    f[1, 1] += 0.1
+    @test_throws "fan, the fan filter, must be point-symmetric" CompactShearlets(scales = 1, fan = f)
     @test CompactShearlets() == CompactShearlets()
 end
 

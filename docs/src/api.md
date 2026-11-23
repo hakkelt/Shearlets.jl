@@ -1,5 +1,8 @@
 # API Reference
 
+Every type and function of Shearlets, including the names it re-exports from
+MultiscaleTransformsBase and MultiscaleFilterBanks.
+
 ```@meta
 CurrentModule = Shearlets
 ```
@@ -53,8 +56,8 @@ similar_coefficients(::ShearletSystem, ::AbstractArray)
 
 ## From MultiscaleTransformsBase
 
-The interface: its generic types and functions (the exported ones are
-re-exported by Shearlets), and its conformance tests.
+The generic types and functions of the transform interface, and its
+conformance tests; Shearlets re-exports the exported names.
 
 ```@docs
 MultiscaleTransformsBase.MultiscaleTransformsBase

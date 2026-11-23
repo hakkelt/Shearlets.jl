@@ -1,8 +1,9 @@
 # [Theory](@id theory)
 
-The figures follow the ones in the papers the systems come from. Every figure
-is computed when the documentation is built, from `shearlet_spectra`, so it
-shows the implementation, not a sketch of it.
+This page explains how the three shearlet systems of the package are built
+and how they differ. The figures follow those of the papers the systems come
+from; they are computed from `shearlet_spectra` when the documentation is
+built.
 
 ```@setup theory
 using Shearlets, Plots, FFTW, Printf
@@ -367,15 +368,6 @@ savefig("bl_3d.png"); nothing # hide
 [count(l -> l.scale == j, subband_layout(BandlimitedShearlets(scales = 3), (64, 64, 64))) for j in 1:3]
 ```
 
-### Relation to MATLAB's `shearletSystem`
-
-MATLAB's Wavelet Toolbox `shearletSystem` is also a band-limited shearlet
-system. Run as a black box on a `64 × 64` image with two scales, its
-`filterbank` has 17 subbands where this package has 13, with the seam elements
-of the two cones kept as separate subbands. Its filters do not match these
-masks sample for sample, so it is not a bitwise reference for this
-implementation.
-
 ## Nonsubsampled shearlet transform (NSST)
 
 [`NSSTShearlets`](@ref) is the discrete shearlet transform of G. Easley, D.
@@ -410,20 +402,18 @@ system, so the NSST has the same directions and subband order as the FFST: a
 level with ``2^d`` directions has ``2^{d-2}`` shears per side of each cone.
 
 The frequency responses of the subbands of one level are the products of the
-level's bandpass with each shearing filter. Below, the half-maximum contour of
-``|\hat\psi_i|^2`` for every subband of the default system (8, 8, 16 and 16
-directions from coarse to fine), colored by scale. The second panel zooms in on
-the two coarse scales. The third shows the radial profile of every pyramid level
-``B_j``, the sum of the level's directional subbands. The pyramid levels overlap
-and do not peak at one, unlike the band-limited radial windows, so coloring each
-frequency by its strongest subband would show a ragged picture:
+level's bandpass with each shearing filter. Below, for the default system (8, 8, 16 and 16 directions from coarse to
+fine), the half-maximum contour of ``|\hat\psi_i|^2`` of every subband of the
+two coarse scales, colored by scale (the [Which system](@ref) figure shows all
+scales), and the radial profile of every pyramid level ``B_j``, the sum of the
+level's directional subbands. Unlike the band-limited radial windows, the
+pyramid levels overlap and do not peak at one:
 
 ```@example theory
 n = 256
 sysn = NSSTShearlets()
 Ln = subband_layout(sysn, (n, n)); Ψn = shearlet_spectra(sysn, (n, n))
-p1 = covering(sysn, n; title = "all subbands")
-p2 = covering(sysn, n; title = "zoomed: scales 1 and 2", xlims = (-40, 40), ylims = (-40, 40))
+p2 = covering(sysn, n; title = "scales 1 and 2", xlims = (-40, 40), ylims = (-40, 40))
 r = 1:(n ÷ 2)
 p3 = plot(; xlabel = "ω₁ (bins), ω₂ = 0", title = "pyramid levels", xscale = :log2, legend = :topleft)
 plot!(p3, r, Ψn[r, 1, 1]; label = "lowpass", lw = 2)
@@ -431,7 +421,7 @@ for j in 1:length(sysn.direction_levels)
     plot!(p3, r, vec(sum(Ψn[r, 1, [i for (i, l) in enumerate(Ln) if l.scale == j]]; dims = 2));
         label = "level $j", lw = 2)
 end
-plot(p1, p2, p3; layout = (1, 3), size = (950, 320), bottom_margin = 5Plots.mm)
+plot(p2, p3; layout = (1, 2), size = (700, 330), bottom_margin = 5Plots.mm)
 savefig("nsst_tiling.png"); nothing # hide
 ```
 
@@ -541,9 +531,8 @@ savefig("compact_shearlets.png"); nothing # hide
 ![](compact_shearlets.png)
 
 At ``|k| = 2^d`` the shearlets of the two cones both point along a seam line,
-and they are almost the same filter (ShearLab 3D, Fig. 8). ShearLab drops the
-vertical cone's copies by default; this package keeps both, as the paper's
-definition does, so the seam directions are counted twice:
+and they are almost the same filter (ShearLab 3D, Fig. 8). This package keeps
+both, so the seam directions are counted twice:
 
 ```@example theory
 a = findfirst(==(ShearletIndex{1}(J, 1, (4,))), Lc)
@@ -554,31 +543,6 @@ savefig("compact_seam.png"); nothing # hide
 ```
 
 ![](compact_seam.png)
-
-Coloring every frequency by the subband with the largest response, as for
-the band-limited system above, gives a ragged picture here: the responses
-overlap and are not normalized, the two seam copies are nearly equal, and the
-finite filters' side lobes win wherever the main lobes are weak. The essential
-supports read better as contours: below, the half-maximum contour of
-``|\hat\psi_i|^2`` of every subband, colored by scale (compare Lim, Fig. 2),
-next to the same plot for the band-limited system. Each compact shearlet's
-support is a rounded wedge, and the wedges overlap their neighbors. The
-band-limited windows meet exactly on the cone and scale boundaries:
-
-```@example theory
-plot(covering(sysc, 256; title = "CompactShearlets()"),
-    covering(BandlimitedShearlets(scales = 4), 256; title = "BandlimitedShearlets(scales = 4)");
-    layout = (1, 2), size = (900, 450))
-savefig("compact_covering.png"); nothing # hide
-```
-
-![](compact_covering.png)
-
-The wedges point where the shear convention says. On average over its
-spectrum, each subband's direction is within 0.4° of
-``\arctan(-k/2^d)`` (3.3° on the finest scale, whose wedges wrap around the
-corners of the grid). Between 80 and 98 % of a subband's energy lies in its
-own angular sector, the directions closer to its shear than to its neighbors'.
 
 Since ``\sum_i |\hat\psi_i|^2`` is not constant, the frame is not tight. Its
 bounds are the extremes of that sum over the grid, and the inverse uses the
@@ -612,36 +576,66 @@ per scale (ShearLab 3D, Definitions 3.3–3.4).
 
 | | `BandlimitedShearlets` | `NSSTShearlets` | `CompactShearlets` |
 |---|---|---|---|
-| Frame | Parseval (inverse = adjoint) | non-tight; inverse sums each level and inverts the pyramid | non-tight; dual-frame inverse |
-| Localization | exact in frequency, polynomial decay in space | à trous pyramid × ``L \times L`` shearing filters | finite filters in space |
+| Frame | Parseval (inverse = adjoint) | not tight; the inverse sums each level and inverts the pyramid | not tight; dual-frame inverse |
+| Localization | exact in frequency, slow decay in space | finite filters in space (except `filter_size = 0`) | finite filters in space |
 | Dimensions | 2-D, 3-D | 2-D | 2-D, 3-D |
-| Subbands at 4 scales (2-D) | 61 | 49 (default directions) | 57 |
-| Variants | `smooth`, `alpha` | `direction_levels`, `filter_size`, `pyramid` | `shear_levels`, `qmf`, `fan` |
+| Subbands at 4 scales (2-D, defaults) | 61 | 49 | 57 |
+| Options | `smooth`, `alpha` | `direction_levels`, `filter_size`, `pyramid` | `shear_levels`, `qmf`, `fan` |
+
+All three are translation invariant and keep the input size in every subband.
+Their frequency tilings at four scales, as the half-maximum contour of
+``|\hat\psi_i|^2`` of every subband, colored by scale (black: the lowpass).
+The band-limited windows meet exactly on the scale and cone boundaries; the
+NSST and compact responses are rounded and overlap their neighbors:
+
+```@example theory
+plot(covering(BandlimitedShearlets(scales = 4), 256; title = "BandlimitedShearlets(scales = 4)"),
+    covering(NSSTShearlets(), 256; title = "NSSTShearlets()"),
+    covering(CompactShearlets(), 256; title = "CompactShearlets()");
+    layout = (1, 3), size = (1050, 370), titlefontsize = 10, bottom_margin = 4Plots.mm)
+savefig("tilings.png"); nothing # hide
+```
+
+![](tilings.png)
+
+## Related toolboxes
+
+MATLAB implementations of these systems exist: the FFST toolbox of Häuser and
+Steidl, the NSST code of Easley, Labate and Lim, ShearLab 3D (MATLAB, with
+Python and Julia ports), and `shearletSystem` in MATLAB's Wavelet Toolbox, a
+band-limited system that keeps the seam elements of the two cones as separate
+subbands. None of them is a sample-for-sample reference for this package.
 
 ## References
 
-1. S. Häuser and G. Steidl, "Fast Finite Shearlet Transform: a tutorial,"
-   arXiv:1202.1773 — the FFST, its windows, the glued seam shearlets and
-   the smooth construction.
+1. S. Häuser and G. Steidl, "Fast finite shearlet transform: a tutorial,"
+   2012, [arXiv:1202.1773](https://arxiv.org/abs/1202.1773). The FFST, its
+   windows, the glued seam shearlets and the smooth construction.
 2. K. Guo and D. Labate, "The construction of smooth Parseval frames of
-   shearlets," *Math. Model. Nat. Phenom.*, 8(1):82–105, 2013 — the smooth seam
-   elements.
+   shearlets," *Math. Model. Nat. Phenom.*, 8(1):82–105, 2013,
+   [doi:10.1051/mmnp/20138106](https://doi.org/10.1051/mmnp/20138106).
+   The smooth seam elements.
 3. F. Voigtlaender and A. Pein, "Analysis vs. synthesis sparsity for
-   α-shearlets," arXiv:1702.03559, 2017 — α-shearlets.
+   α-shearlets," 2017, [arXiv:1702.03559](https://arxiv.org/abs/1702.03559).
 4. G. Easley, D. Labate and W.-Q. Lim, "Sparse directional image representations
    using the discrete shearlet transform," *Appl. Comput. Harmon. Anal.*,
-   25(1):25–46, 2008 — the NSST.
+   25(1):25–46, 2008,
+   [doi:10.1016/j.acha.2007.09.003](https://doi.org/10.1016/j.acha.2007.09.003).
+   The NSST.
 5. G. Kutyniok, W.-Q. Lim and R. Reisenhofer, "ShearLab 3D: Faithful digital
    shearlet transforms based on compactly supported shearlets," *ACM Trans. Math.
-   Softw.*, 42(1):5, 2016 — the compactly supported digital shearlets in 2-D and
-   3-D.
+   Softw.*, 42(1):5, 2016, [doi:10.1145/2740960](https://doi.org/10.1145/2740960).
+   The compactly supported digital shearlets in 2-D and 3-D.
 6. W.-Q. Lim, "Nonseparable shearlet transform," *IEEE Trans. Image Process.*,
-   22(5):2056–2065, 2013 — the nonseparable generator with a fan filter.
+   22(5):2056–2065, 2013,
+   [doi:10.1109/TIP.2013.2244223](https://doi.org/10.1109/TIP.2013.2244223).
+   The nonseparable generator with a fan filter.
 7. A. L. da Cunha, J. Zhou and M. N. Do, "The nonsubsampled contourlet
    transform: theory, design, and applications," *IEEE Trans. Image Process.*,
-   15(10):3089–3101, 2006 — the maximally flat fan filters (Table II).
+   15(10):3089–3101, 2006,
+   [doi:10.1109/TIP.2006.877507](https://doi.org/10.1109/TIP.2006.877507).
+   The maximally flat fan filters (Table II).
 8. P. S. Negi and D. Labate, "3-D discrete shearlet transform and video
-   processing," *IEEE Trans. Image Process.*, 21(6):2944–2954, 2012 — 3-D
-   shearlets.
-9. G. Kutyniok and D. Labate (eds.), *Shearlets: Multiscale Analysis for
-   Multivariate Data*, Birkhäuser, 2012.
+   processing," *IEEE Trans. Image Process.*, 21(6):2944–2954, 2012,
+   [doi:10.1109/TIP.2012.2183883](https://doi.org/10.1109/TIP.2012.2183883).
+   3-D shearlets.

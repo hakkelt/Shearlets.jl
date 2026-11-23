@@ -14,17 +14,20 @@ Translation-invariant discrete shearlet transforms of images and volumes,
 computed on the DFT grid.
 
 A shearlet system splits an image by scale, like a wavelet, and each scale
-further by orientation, using sheared copies of one generator. Every subband
-then holds the edges of one scale and one direction, so images with curved
-edges are represented far more sparsely than by separable wavelets, which helps
-denoising, edge detection and compressed-sensing reconstruction.
+further by direction. Each subband then holds the edges of one scale and one
+direction, so images with curved edges have sparser coefficients than with
+separable wavelets. This helps in denoising, edge detection and
+compressed-sensing reconstruction. The package has three systems:
+band-limited shearlets (`BandlimitedShearlets`, 2-D and 3-D), the
+nonsubsampled shearlet transform (`NSSTShearlets`, 2-D) and compactly
+supported shearlets (`CompactShearlets`, 2-D and 3-D).
 
 ```julia
 using Shearlets
 
 x = randn(256, 256)
-sys = BandlimitedShearlets(scales = 4)        # FFST, a Parseval frame
-c = analyze(sys, x)                           # 256 × 256 × 61
+sys = BandlimitedShearlets(scales = 4)
+c = analyze(sys, x)                           # 256 × 256 × 61, one subband per slice
 subband_layout(sys, size(x))[10]              # ShearletIndex(scale = 2, cone = 1, shear = (2,))
 x ≈ synthesize(sys, c)                        # true
 ```
@@ -48,87 +51,29 @@ Pkg.develop([PackageSpec(path = "MultiscaleTransformsBase"),
              PackageSpec(path = "Shearlets")])
 ```
 
-## Shearlet systems
+## Documentation
 
-| System | Construction | Frame | Dimensions |
-|---|---|---|---|
-| `BandlimitedShearlets` | Häuser & Steidl's Fast Finite Shearlet Transform: Meyer windows on the DFT grid; `smooth = true` for Guo & Labate's smooth seam elements; `alpha` for α-shearlets | Parseval | 2-D, 3-D |
-| `NSSTShearlets` | Easley, Labate & Lim's nonsubsampled shearlet transform: à trous pyramid plus shearing filters | biorthogonal | 2-D |
-| `CompactShearlets` | ShearLab 3D's compactly supported digital shearlets (nonseparable generator, digital shear) | dual frame | 2-D, 3-D |
-
-Every subband has the size of the input. Real input gives real subbands;
-complex input is transformed as its real and imaginary parts. The
-[theory page](https://hakkelt.github.io/Shearlets.jl/stable/theory/) explains the
-constructions with figures, and the
-[examples](https://hakkelt.github.io/Shearlets.jl/stable/examples/) reproduce the
-papers' experiments.
-
-## Repeated transforms and multithreading
-
-```julia
-ws = make_workspace(sys, x)                    # masks, FFT plans, buffers for data like x
-c = similar_coefficients(sys, x)
-analyze!(c, sys, x; workspace = ws)            # allocation-free
-analyze!(c, ws, x)                             # the same, from the workspace alone
-synthesize!(x, sys, c; workspace = ws)
-```
-
-The subbands are computed in parallel over Julia's threads (start Julia with
-`-t auto`) unless `threaded = false`. For data too large to hold every subband,
-`analyze(f, sys, x)` streams them to `f(i, band)` one at a time.
-
-## GPU
-
-The transforms run on GPU backends with an FFT library: CUDA.jl (NVIDIA),
-AMDGPU.jl (AMD) and Metal.jl (Apple silicon, `Float32` only). The test suite
-runs on CUDA. OpenCL.jl is supported but much slower than the CPU, because it
-has no FFT: FFTW runs the FFTs on the CPU on `CLArray`s in shared virtual memory
-(OpenCL.jl's default on devices that support it). Build the workspace from
-device data (the Adapt extension, which loads with any GPU package, moves it there):
-
-```julia
-using CUDA
-xg = CuArray(x)
-ws = make_workspace(sys, xg)
-c = analyze(sys, xg; workspace = ws)
-```
-
-On the device the subbands are transformed in chunks, one batched FFT per chunk,
-which keeps small grids from being bound by kernel launches; the chunk size
-follows from the grid size. `make_workspace(sys, xg; tune = true)` measures the
-fastest chunk size on the device instead, in a fraction of a second once compiled.
-The chunks' stacks and batched FFT plans take up to about 80 MB of device
-memory on top of the coefficients; grids too large to chunk, such as 128³, are
-transformed one subband at a time.
+The [manual](https://hakkelt.github.io/Shearlets.jl/dev/) has how-to guides
+(workspaces, threads, GPUs, streaming, choosing parameters, worked examples),
+an explanation of the three systems with figures and references, and the API
+reference.
 
 ## Related packages
 
 [Contourlets.jl](https://github.com/hakkelt/Contourlets.jl) (2-D contourlets)
 and [Surfacelets.jl](https://github.com/hakkelt/Surfacelets.jl) (3-D surfacelets)
-are multidirectional transforms of the same family. All three are built on
-[MultiscaleFilterBanks.jl](https://github.com/hakkelt/MultiscaleFilterBanks.jl),
-whose `FilterPair` and `CDF97` are re-exported here, and implement the common
-interface of
+are directional transforms of the same family. All three are built on
+[MultiscaleFilterBanks.jl](https://github.com/hakkelt/MultiscaleFilterBanks.jl)
+and implement the interface of
 [MultiscaleTransformsBase.jl](https://github.com/hakkelt/MultiscaleTransformsBase.jl)
-(`analyze`, `synthesize`, `make_workspace`, `subband_layout`, ...), whose names
-are re-exported too.
+(`analyze`, `synthesize`, `make_workspace`, `subband_layout`, ...), whose
+names Shearlets re-exports.
 
-## Development
+## License
 
-```bash
-julia --project=test test/runtests.jl          # all tests
-julia --project=docs docs/make.jl              # build the documentation
-```
-
-MultiscaleFilterBanks.jl and MultiscaleTransformsBase.jl are expected as sibling
-checkouts (`../MultiscaleFilterBanks`, `../MultiscaleTransformsBase`); on Julia 1.10 run
-`julia --project=. dev/bootstrap.jl` once.
+MIT; see [`LICENSE`](LICENSE). Third-party notices are in [`NOTICE`](NOTICE).
 
 ## Disclaimer
 
 This package was created by [Claude](https://claude.com/claude-code), Anthropic's
 AI model, under the direction of the author.
-
-## License
-
-MIT; see [`LICENSE`](LICENSE). Third-party notices are in [`NOTICE`](NOTICE).

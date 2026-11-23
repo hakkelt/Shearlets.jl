@@ -30,6 +30,13 @@ forward/inverse and streaming entry points, `mask_bank_tune`), and the internals
 `data_eltype`, `loop_threaded`, `with_fftw_threads`, `nsp_responses` (the NSST
 pyramid) and `DEFAULT_CHUNK_SAMPLES`, imported in `src/Shearlets.jl`.
 
+**Running the tests and the docs**:
+
+```bash
+julia --project=test test/runtests.jl          # all tests
+julia --project=docs docs/make.jl              # build the documentation
+```
+
 **First checkout**: `MultiscaleFilterBanks.jl` and `MultiscaleTransformsBase.jl` are
 unregistered and expected as sibling directories, wired in through `[sources]`. On Julia 1.10, which does not
 read `[sources]`, run `julia --project=. dev/bootstrap.jl` once instead.

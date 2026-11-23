@@ -4,8 +4,8 @@ The experiments the shearlet papers use to show what the transform does, run
 with this package: the coefficient stack and a round trip (Häuser & Steidl,
 Figs. 12 and 14), edges of different orientations (their Figs. 1 and 13),
 directional selectivity and shift invariance, image denoising (Easley, Labate &
-Lim, Fig. 9; ShearLab 3D, Fig. 11), and a volume. For the constructions behind
-them, see the [theory](@ref theory). Images are shown as images here: axis 1
+Lim, Fig. 9; ShearLab 3D, Fig. 11), and a volume. The
+[explanation](@ref theory) describes the constructions and lists the papers. Images are shown as images here: axis 1
 (rows) runs downwards.
 
 ```@setup ex
@@ -110,9 +110,7 @@ savefig("ex_mean.png"); nothing # hide
 
 ## Directional selectivity
 
-Perfect reconstruction says nothing about whether the subbands point where
-they should: a scrambled set of masks reconstructs just as well. A plane wave
-does. Its energy should land in the subband whose direction is the wave's:
+A plane wave shows where the subbands point: its energy should land in the subband whose direction is the wave's:
 cone 1 when ``|\omega_2| \le |\omega_1|``, with shear
 ``k \approx -s\,\omega_2/\omega_1`` for ``s`` shears per side (the seam elements
 are listed under cone 1). Here, for waves at the finest scale of each system:

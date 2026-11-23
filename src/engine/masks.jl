@@ -147,36 +147,59 @@ it point-symmetric on the grid, and keeps `Σᵢ Mᵢ² = 1` (root mean square) 
 function _alias_sample!(acc, v, evaluate!::F, I::CartesianIndex{N}, grid::NTuple{N, Int}, rms::Bool) where {F, N}
     f = ntuple(d -> _signed_bin(I[d], grid[d]), Val(N))
     nyq = ntuple(d -> iseven(grid[d]) && abs(f[d]) == grid[d] ÷ 2, Val(N))
-    if !any(nyq)
-        r = evaluate!(v, f)
-        for i in r
-            acc[i] = v[i]
-        end
-        return r
+    any(nyq) && return _alias_average!(acc, v, evaluate!, f, nyq, grid, rms)
+    r = evaluate!(v, f)
+    for i in r
+        acc[i] = v[i]
     end
+    return r
+end
+
+# `_alias_sample!` at a point on a Nyquist plane: the root mean square (`rms`)
+# or the mean of the masks over the aliases of the frequency `f`, which is
+# `±n/2` along each axis flagged in `nyq`.
+function _alias_average!(acc, v, evaluate!::F, f::NTuple{N, Int}, nyq::NTuple{N, Bool}, grid::NTuple{N, Int}, rms::Bool) where {F, N}
     lo, hi, nrep = typemax(Int), 0, 0
     # Each Nyquist axis has the aliases ±n/2 (index 1 → -, 2 → +).
     for s in CartesianIndices(ntuple(d -> nyq[d] ? 2 : 1, Val(N)))
         fr = ntuple(d -> nyq[d] ? (2s[d] - 3) * (grid[d] ÷ 2) : f[d], Val(N))
         r = evaluate!(v, fr)
-        isempty(r) && (nrep += 1; continue)
-        # Clear the entries the range grows by.
-        nlo, nhi = min(lo, first(r)), max(hi, last(r))
-        for i in nlo:nhi
-            (i < lo || i > hi) && (acc[i] = 0.0)
-        end
-        lo, hi = nlo, nhi
-        # Entries of the range that this alias did not write are zero there.
-        for i in r
-            acc[i] += rms ? v[i]^2 : v[i]
-        end
         nrep += 1
+        isempty(r) && continue
+        lo, hi = _grow_range!(acc, lo, hi, r)
+        # Entries of the range that this alias did not write are zero there.
+        _add_alias!(acc, v, r, rms)
     end
     hi == 0 && return 1:0
-    for i in lo:hi
+    _alias_normalize!(acc, lo:hi, nrep, rms)
+    return lo:hi
+end
+
+# acc[r] += v[r] squared (`rms`) or as it is.
+function _add_alias!(acc, v, r::AbstractUnitRange, rms::Bool)
+    for i in r
+        acc[i] += rms ? v[i]^2 : v[i]
+    end
+    return acc
+end
+
+# The sums over `nrep` aliases in acc[r] turned into root mean squares (`rms`)
+# or means.
+function _alias_normalize!(acc, r::AbstractUnitRange, nrep::Int, rms::Bool)
+    for i in r
         acc[i] = rms ? sqrt(acc[i] / nrep) : acc[i] / nrep
     end
-    return lo:hi
+    return acc
+end
+
+# The range `lo:hi` grown to cover `r`, with `acc` cleared on the entries it
+# grows by.
+function _grow_range!(acc, lo::Int, hi::Int, r::AbstractUnitRange)
+    nlo, nhi = min(lo, first(r)), max(hi, last(r))
+    for i in nlo:nhi
+        (i < lo || i > hi) && (acc[i] = 0.0)
+    end
+    return nlo, nhi
 end
 
 """

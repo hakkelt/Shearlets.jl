@@ -45,14 +45,15 @@ jobs:
 
       - uses: julia-actions/cache@v3
 
-      # MultiscaleFilterBanks is not registered yet: [sources] expects it as a
-      # sibling checkout, and Julia 1.10 ignores [sources], so bootstrap.jl also
-      # records the path in the (untracked) manifests. Drop both steps once it
-      # is registered.
-      - name: Check out MultiscaleFilterBanks
-        run: git clone --depth 1 https://github.com/hakkelt/MultiscaleFilterBanks.jl ../MultiscaleFilterBanks
+      # AbstractMultiscaleTransforms is not registered and the code needs the
+      # development version of MultiscaleFilterBanks: clone both next to this
+      # repository and develop them (see dev/bootstrap.jl).
+      - name: Check out AbstractMultiscaleTransforms and MultiscaleFilterBanks
+        run: |
+          git clone --depth 1 https://github.com/hakkelt/AbstractMultiscaleTransforms.jl ../AbstractMultiscaleTransforms
+          git clone --depth 1 https://github.com/hakkelt/MultiscaleFilterBanks.jl ../MultiscaleFilterBanks
 
-      - name: Develop MultiscaleFilterBanks
+      - name: Develop the sibling checkouts
         run: julia --project=. dev/bootstrap.jl
 
       - uses: julia-actions/julia-runtest@v1

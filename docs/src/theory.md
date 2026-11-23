@@ -131,8 +131,10 @@ All three systems of this package compute a **translation-invariant** discrete
 transform: every subband is a periodic convolution of the input with one
 filter, so it keeps the size of the input and commutes with circular shifts.
 On the DFT grid each filter is a real, point-symmetric mask, and the transform
-is one FFT, then a masked product and an inverse FFT per subband. The systems
-differ in how the masks are built and what frame they form.
+is one FFT, then a masked product and an inverse FFT per subband, computed by
+the mask-bank engine of MultiscaleFilterBanks.jl
+([How the engine computes](https://hakkelt.github.io/MultiscaleFilterBanks.jl/dev/engine/)). The systems differ in how the masks
+are built and what frame they form.
 
 `subband_layout(system, size(x))` lists the subbands in the order the
 coefficients stack them. A [`ShearletIndex`](@ref) has a `scale` (0 for the
@@ -386,7 +388,9 @@ x ─┬─ bandpass level J (finest) ─┬─ shearing filter w_{J,1} ─→ s
 ```
 
 The pyramid is MultiscaleFilterBanks' à trous pyramid with the [`CDF97`](@ref)
-pair, the one the nonsubsampled contourlet transform uses. On the DFT grid
+pair, the one the nonsubsampled contourlet transform uses; MultiscaleFilterBanks.jl
+explains the [filter pair](https://hakkelt.github.io/MultiscaleFilterBanks.jl/dev/theory/#The-biorthogonal-filter-pair) and the
+[nonsubsampled pyramid](https://hakkelt.github.io/MultiscaleFilterBanks.jl/dev/theory/#The-nonsubsampled-pyramid). On the DFT grid
 level ``j`` is ``B_j = \big(\prod_{i<j} H_i\big)(1 - G_j H_j)`` with the
 upsampled lowpass filters ``H_i, G_i``, and ``\sum_j S_j B_j = 1`` for the
 synthesis products ``S_j = \prod_{i<j} G_i``.

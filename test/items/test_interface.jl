@@ -179,7 +179,7 @@ end
     # Every Julia block of the README, in order, in one module, except the
     # installation and GPU blocks: an API change that breaks one fails here.
     readme = read(joinpath(@__DIR__, "..", "..", "README.md"), String)
-    blocks = [m.captures[1] for m in eachmatch(r"```julia\n(.*?)```"s, readme)]
+    blocks = [m.captures[1] for m in eachmatch(r"```julia\r?\n(.*?)```"s, readme)]
     runnable = filter(b -> !occursin("Pkg", b) && !occursin("CUDA", b), blocks)
     @test !isempty(runnable)
     mod = Module()

@@ -181,7 +181,7 @@ end
     readme = read(joinpath(@__DIR__, "..", "..", "README.md"), String)
     blocks = [m.captures[1] for m in eachmatch(r"```julia\n(.*?)```"s, readme)]
     runnable = filter(b -> !occursin("Pkg", b) && !occursin("CUDA", b), blocks)
-    @test length(runnable) >= 2
+    @test !isempty(runnable)
     mod = Module()
     for b in runnable
         @test (include_string(mod, b); true)

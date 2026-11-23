@@ -1,7 +1,7 @@
 # API Reference
 
 Every type and function of Shearlets, including the names it re-exports from
-MultiscaleTransformsBase and MultiscaleFilterBanks.
+AbstractMultiscaleTransforms and MultiscaleFilterBanks.
 
 ```@meta
 CurrentModule = Shearlets
@@ -30,7 +30,7 @@ shearlet_spectra
 ## Transforms
 
 The verbs of
-[MultiscaleTransformsBase](https://github.com/hakkelt/MultiscaleTransformsBase.jl),
+[AbstractMultiscaleTransforms](https://github.com/hakkelt/AbstractMultiscaleTransforms.jl),
 for shearlet systems.  Every form also takes a workspace in place of the
 system: `analyze(ws, x)`, `analyze!(c, ws, x)`, `synthesize(ws, c)`,
 `synthesize!(x, ws, c)`, `analyze(f, ws, x)` and `synthesize!(f, x, ws)`.
@@ -54,23 +54,23 @@ subband(::ShearletSystem, ::AbstractArray, ::Integer)
 similar_coefficients(::ShearletSystem, ::AbstractArray)
 ```
 
-## From MultiscaleTransformsBase
+## From AbstractMultiscaleTransforms
 
 The generic types and functions of the transform interface, and its
 conformance tests; Shearlets re-exports the exported names.
 
 ```@docs
-MultiscaleTransformsBase.MultiscaleTransformsBase
-MultiscaleTransformsBase.AbstractMultiscaleTransform
-MultiscaleTransformsBase.AbstractTransformWorkspace
-MultiscaleTransformsBase.transform
-MultiscaleTransformsBase.nsubbands
-MultiscaleTransformsBase.SubbandVector
-MultiscaleTransformsBase.SubbandLayout
-MultiscaleTransformsBase.DefaultWorkspace
-MultiscaleTransformsBase.check_workspace
-MultiscaleTransformsBase.Testing
-MultiscaleTransformsBase.Testing.test_transform
+AbstractMultiscaleTransforms.AbstractMultiscaleTransforms
+AbstractMultiscaleTransforms.AbstractMultiscaleTransform
+AbstractMultiscaleTransforms.AbstractTransformWorkspace
+AbstractMultiscaleTransforms.transform
+AbstractMultiscaleTransforms.nsubbands
+AbstractMultiscaleTransforms.SubbandVector
+AbstractMultiscaleTransforms.SubbandLayout
+AbstractMultiscaleTransforms.DefaultWorkspace
+AbstractMultiscaleTransforms.check_workspace
+AbstractMultiscaleTransforms.Testing
+AbstractMultiscaleTransforms.Testing.test_transform
 ```
 
 ## Re-exported from MultiscaleFilterBanks

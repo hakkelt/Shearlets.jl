@@ -35,18 +35,18 @@ x ≈ synthesize(sys, c)                        # true
 ## Installation
 
 Shearlets.jl and its dependencies MultiscaleFilterBanks.jl and
-MultiscaleTransformsBase.jl are not registered yet. Clone the three repositories
+AbstractMultiscaleTransforms.jl are not registered yet. Clone the three repositories
 side by side and develop them into your environment:
 
 ```bash
-git clone https://github.com/hakkelt/MultiscaleTransformsBase.jl MultiscaleTransformsBase
+git clone https://github.com/hakkelt/AbstractMultiscaleTransforms.jl AbstractMultiscaleTransforms
 git clone https://github.com/hakkelt/MultiscaleFilterBanks.jl MultiscaleFilterBanks
 git clone https://github.com/hakkelt/Shearlets.jl Shearlets
 ```
 
 ```julia
 using Pkg
-Pkg.develop([PackageSpec(path = "MultiscaleTransformsBase"),
+Pkg.develop([PackageSpec(path = "AbstractMultiscaleTransforms"),
              PackageSpec(path = "MultiscaleFilterBanks"),
              PackageSpec(path = "Shearlets")])
 ```
@@ -65,7 +65,7 @@ and [Surfacelets.jl](https://github.com/hakkelt/Surfacelets.jl) (3-D surfacelets
 are directional transforms of the same family. All three are built on
 [MultiscaleFilterBanks.jl](https://github.com/hakkelt/MultiscaleFilterBanks.jl)
 and implement the interface of
-[MultiscaleTransformsBase.jl](https://github.com/hakkelt/MultiscaleTransformsBase.jl)
+[AbstractMultiscaleTransforms.jl](https://github.com/hakkelt/AbstractMultiscaleTransforms.jl)
 (`analyze`, `synthesize`, `make_workspace`, `subband_layout`, ...), whose
 names Shearlets re-exports.
 

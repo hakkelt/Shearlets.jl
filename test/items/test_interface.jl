@@ -1,5 +1,5 @@
-@testitem "MultiscaleTransformsBase conformance" tags = [:interface] begin
-    using MultiscaleTransformsBase.Testing: test_transform
+@testitem "AbstractMultiscaleTransforms conformance" tags = [:interface] begin
+    using AbstractMultiscaleTransforms.Testing: test_transform
     using Random
     rng = Xoshiro(11)
     for (sys, dims, other) in (
@@ -17,7 +17,7 @@
 end
 
 @testitem "Interface: accessors, workspace and ambiguities" tags = [:interface, :workspace] begin
-    using MultiscaleTransformsBase, Random, Test
+    using AbstractMultiscaleTransforms, Random, Test
     sys = CompactShearlets(scales = 2)
     @test sys isa AbstractMultiscaleTransform
     x = randn(Xoshiro(12), 32, 48)
@@ -27,8 +27,8 @@ end
     @test nsubbands(sys, size(x)) == length(L) == size(c, 3)
     @test subband(sys, c, 2) == c[:, :, 2]
     @test parent(subband(sys, c, 2)) === c
-    @test MultiscaleTransformsBase.signal_size(sys, c) == size(x)
-    @test MultiscaleTransformsBase.supports_streaming(sys)
+    @test AbstractMultiscaleTransforms.signal_size(sys, c) == size(x)
+    @test AbstractMultiscaleTransforms.supports_streaming(sys)
     s = similar_coefficients(sys, rand(Xoshiro(1), 0:9, 32, 48))
     @test size(s) == size(c) && eltype(s) == Float64
     ws = make_workspace(sys, Float32, size(x); flags = Shearlets.FFTW.ESTIMATE)
@@ -70,7 +70,7 @@ end
     y = similar(x)
     @test synthesize!(i -> subband(sys, c, i), y, sys; threaded = true) === y
     @test y ≈ x
-    @test isempty(Test.detect_ambiguities(Shearlets, MultiscaleTransformsBase))
+    @test isempty(Test.detect_ambiguities(Shearlets, AbstractMultiscaleTransforms))
 end
 
 @testitem "Workspace keywords: flags, tasks, tune, prewarm" tags = [:interface, :workspace] begin

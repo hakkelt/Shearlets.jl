@@ -1,4 +1,4 @@
-# The shearlet systems as MultiscaleTransformsBase transforms, over the mask
+# The shearlet systems as AbstractMultiscaleTransforms transforms, over the mask
 # engine (`engine/workspace.jl`).
 #
 # Coefficients are one array of size `(size(x)..., nsubbands)`: every subband has
@@ -25,14 +25,14 @@ function _check_coefficients(coeffs::AbstractArray, ws::ShearletWorkspace)
     return nothing
 end
 
-MultiscaleTransformsBase.supports_streaming(::ShearletSystem) = true
+AbstractMultiscaleTransforms.supports_streaming(::ShearletSystem) = true
 
 """
     subband(system::ShearletSystem, c, i) -> AbstractArray
 
 Subband `i` of the coefficients `c` of `system`: the view `selectdim(c, ndims(c), i)`.
 """
-MultiscaleTransformsBase.subband(::ShearletSystem, c::AbstractArray, i::Integer) = selectdim(c, ndims(c), i)
+AbstractMultiscaleTransforms.subband(::ShearletSystem, c::AbstractArray, i::Integer) = selectdim(c, ndims(c), i)
 
 """
     similar_coefficients(system::ShearletSystem, x) -> AbstractArray
@@ -41,12 +41,12 @@ Uninitialized coefficients of `system` for data like `x`: an array like `x`
 (host or device) of element type `float(eltype(x))` and size
 `(size(x)..., nsubbands(system, size(x)))`.  `x` must be indexed from 1.
 """
-function MultiscaleTransformsBase.similar_coefficients(sys::ShearletSystem, x::AbstractArray)
+function AbstractMultiscaleTransforms.similar_coefficients(sys::ShearletSystem, x::AbstractArray)
     Base.require_one_based_indexing(x)
     return similar(x, data_eltype(x), (size(x)..., nsubbands(sys, size(x))))
 end
 
-MultiscaleTransformsBase.signal_size(::ShearletSystem, c::AbstractArray) = Base.front(size(c))
+AbstractMultiscaleTransforms.signal_size(::ShearletSystem, c::AbstractArray) = Base.front(size(c))
 
 """
     analyze(system::ShearletSystem, x; workspace = nothing, threaded = nothing) -> AbstractArray
@@ -81,7 +81,7 @@ julia> sum(abs2, c) ≈ sum(abs2, x)   # a Parseval frame
 true
 ```
 """
-function MultiscaleTransformsBase.analyze(
+function AbstractMultiscaleTransforms.analyze(
         sys::ShearletSystem, x::AbstractArray{<:Number};
         workspace::Union{ShearletWorkspace, Nothing} = nothing, threaded::Union{Bool, Nothing} = nothing
     )
@@ -102,7 +102,7 @@ complex element type when `x` is complex (`DimensionMismatch` and
 `ArgumentError` otherwise).  With a `workspace` it allocates nothing but the
 threads' tasks.
 """
-function MultiscaleTransformsBase.analyze!(
+function AbstractMultiscaleTransforms.analyze!(
         coeffs::AbstractArray{<:Number}, sys::ShearletSystem, x::AbstractArray{<:Number};
         workspace::Union{ShearletWorkspace, Nothing} = nothing, threaded::Union{Bool, Nothing} = nothing
     )
@@ -158,7 +158,7 @@ reduce it there.  The subbands are computed one at a time: `f` is called once
 per subband, in that order, from the calling task.  `threaded` has no effect
 (it is accepted for the common interface).
 """
-function MultiscaleTransformsBase.analyze(
+function AbstractMultiscaleTransforms.analyze(
         f, sys::ShearletSystem, x::AbstractArray{<:Number};
         workspace::Union{ShearletWorkspace, Nothing} = nothing, threaded::Union{Bool, Nothing} = nothing
     )
@@ -179,7 +179,7 @@ also the adjoint of the forward transform; the others are dual frames.  Complex
 coefficients give a complex result.  `workspace` and `threaded` are those of
 [`analyze`](@ref analyze(::ShearletSystem, ::AbstractArray{<:Number})).
 """
-function MultiscaleTransformsBase.synthesize(
+function AbstractMultiscaleTransforms.synthesize(
         sys::ShearletSystem, coeffs::AbstractArray{<:Number};
         workspace::Union{ShearletWorkspace, Nothing} = nothing, threaded::Union{Bool, Nothing} = nothing
     )
@@ -196,7 +196,7 @@ the inverse of `c` into `x`, of size `size(c)[1:end-1]` and a complex element
 type when `c` is complex (`DimensionMismatch` and `ArgumentError` otherwise).
 With a `workspace` and `threaded = false` it allocates nothing.
 """
-function MultiscaleTransformsBase.synthesize!(
+function AbstractMultiscaleTransforms.synthesize!(
         x::AbstractArray{<:Number}, sys::ShearletSystem, coeffs::AbstractArray{<:Number};
         workspace::Union{ShearletWorkspace, Nothing} = nothing, threaded::Union{Bool, Nothing} = nothing
     )
@@ -221,7 +221,7 @@ order, from the calling task, and each result is read before the next call, so
 `f` may reuse one buffer.  `threaded` has no effect (it is accepted for the
 common interface).
 """
-function MultiscaleTransformsBase.synthesize!(
+function AbstractMultiscaleTransforms.synthesize!(
         f, x::AbstractArray{<:Number}, sys::ShearletSystem;
         workspace::Union{ShearletWorkspace, Nothing} = nothing, threaded::Union{Bool, Nothing} = nothing
     )

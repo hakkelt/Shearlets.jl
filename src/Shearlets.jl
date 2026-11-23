@@ -14,7 +14,7 @@ computed on the DFT grid.
 | `shearlet_spectra` | The frequency responses, for inspection |
 
 The verbs and accessors are those of
-[MultiscaleTransformsBase](https://github.com/hakkelt/MultiscaleTransformsBase.jl),
+[AbstractMultiscaleTransforms](https://github.com/hakkelt/AbstractMultiscaleTransforms.jl),
 re-exported here; every shearlet system is an `AbstractMultiscaleTransform`.
 
 Shearlet systems:
@@ -34,7 +34,7 @@ module Shearlets
 
 using FFTW: FFTW, plan_rfft, plan_brfft
 
-using MultiscaleTransformsBase: MultiscaleTransformsBase, AbstractMultiscaleTransform, AbstractTransformWorkspace,
+using AbstractMultiscaleTransforms: AbstractMultiscaleTransforms, AbstractMultiscaleTransform, AbstractTransformWorkspace,
     analyze, analyze!, synthesize, synthesize!, make_workspace, transform, similar_coefficients,
     subband_layout, nsubbands, subband, SubbandVector, SubbandLayout, check_workspace, signal_size
 
@@ -66,7 +66,7 @@ export
     # Re-exported from MultiscaleFilterBanks
     FilterPair, CDF97,
 
-    # Re-exported from MultiscaleTransformsBase
+    # Re-exported from AbstractMultiscaleTransforms
     AbstractMultiscaleTransform, AbstractTransformWorkspace,
     analyze, analyze!, synthesize, synthesize!, make_workspace, transform, similar_coefficients,
     subband_layout, nsubbands, subband, SubbandVector, SubbandLayout,

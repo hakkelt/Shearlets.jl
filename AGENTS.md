@@ -13,10 +13,10 @@ MultiscaleFilterBanks.jl   (shared core: FilterPair, CDF97, à trous responses, 
 ```
 
 Every transform package also implements the interface of
-`MultiscaleTransformsBase.jl` (transform objects, `analyze`/`synthesize`,
+`AbstractMultiscaleTransforms.jl` (transform objects, `analyze`/`synthesize`,
 `make_workspace`, `subband_layout`/`subband`) and re-exports its names. The
 shearlet systems subtype `AbstractMultiscaleTransform`; the test suite runs
-`MultiscaleTransformsBase.Testing.test_transform` on each. Define interface
+`AbstractMultiscaleTransforms.Testing.test_transform` on each. Define interface
 methods on Shearlets' own types only (`ShearletSystem`, `ShearletWorkspace`):
 a method on the abstract types would be ambiguous with the interface's fallbacks.
 
@@ -35,7 +35,7 @@ julia --project=test test/runtests.jl          # all tests
 julia --project=docs docs/make.jl              # build the documentation
 ```
 
-**First checkout**: `MultiscaleFilterBanks.jl` and `MultiscaleTransformsBase.jl` are
+**First checkout**: `MultiscaleFilterBanks.jl` and `AbstractMultiscaleTransforms.jl` are
 unregistered and expected as sibling directories, wired in through `[sources]`. On Julia 1.10, which does not
 read `[sources]`, run `julia --project=. dev/bootstrap.jl` once instead.
 
@@ -74,7 +74,7 @@ FFT. The pieces:
 - `ext/ShearletsAdaptExt.jl` — the GPU path: `Adapt.adapt_structure` (the
   masks moved, the engine rebuilt with batched plans: chunks of subbands per
   FFT) and the device routing of `make_workspace(sys, x)`. The extension loads
-  with Adapt, a weak dependency here and of MultiscaleTransformsBase, which
+  with Adapt, a weak dependency here and of AbstractMultiscaleTransforms, which
   every GPU package loads.
 
 ## Invariants

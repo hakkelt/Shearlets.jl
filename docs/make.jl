@@ -1,20 +1,20 @@
-using Documenter, Shearlets, MultiscaleFilterBanks, MultiscaleTransformsBase
+using Documenter, Shearlets, MultiscaleFilterBanks, AbstractMultiscaleTransforms
 using Documenter: Remotes
 
 DocMeta.setdocmeta!(Shearlets, :DocTestSetup, :(using Shearlets, Random); recursive = true)
 DocMeta.setdocmeta!(MultiscaleFilterBanks, :DocTestSetup, :(using MultiscaleFilterBanks, Random); recursive = true)
 
 makedocs(;
-    # MultiscaleFilterBanks and MultiscaleTransformsBase are listed because the
+    # MultiscaleFilterBanks and AbstractMultiscaleTransforms are listed because the
     # API page includes docstrings of names Shearlets re-exports; their other
     # names are documented in their own manuals, so `checkdocs` skips them.
-    modules = [Shearlets, MultiscaleFilterBanks, MultiscaleTransformsBase],
-    checkdocs_ignored_modules = [MultiscaleFilterBanks, MultiscaleTransformsBase],
+    modules = [Shearlets, MultiscaleFilterBanks, AbstractMultiscaleTransforms],
+    checkdocs_ignored_modules = [MultiscaleFilterBanks, AbstractMultiscaleTransforms],
     sitename = "Shearlets.jl",
     repo = Remotes.GitHub("hakkelt", "Shearlets.jl"),
     remotes = Dict(
         pkgdir(MultiscaleFilterBanks) => Remotes.GitHub("hakkelt", "MultiscaleFilterBanks.jl"),
-        pkgdir(MultiscaleTransformsBase) => Remotes.GitHub("hakkelt", "MultiscaleTransformsBase.jl"),
+        pkgdir(AbstractMultiscaleTransforms) => Remotes.GitHub("hakkelt", "AbstractMultiscaleTransforms.jl"),
     ),
     authors = "Tamás Hakkel",
     format = Documenter.HTML(; canonical = "https://hakkelt.github.io/Shearlets.jl"),

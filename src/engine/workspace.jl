@@ -56,7 +56,7 @@ _nsubbands(ws::ShearletWorkspace) = length(ws.engine.items)
 _threaded(threaded::Union{Bool, Nothing}) = loop_threaded(threaded !== false)
 
 # Sizes of any integer type.
-MultiscaleTransformsBase.make_workspace(sys::ShearletSystem, ::Type{T}, dims::Tuple{Vararg{Integer}}; kwargs...) where {T <: Number} =
+AbstractMultiscaleTransforms.make_workspace(sys::ShearletSystem, ::Type{T}, dims::Tuple{Vararg{Integer}}; kwargs...) where {T <: Number} =
     make_workspace(sys, T, map(Int, dims); kwargs...)
 
 """
@@ -75,7 +75,7 @@ type `T` (real or complex; integers count as `float(T)`) and size `dims`.
   that the first call does not compile.  It costs a transform and, meanwhile,
   a full coefficient array.
 """
-function MultiscaleTransformsBase.make_workspace(
+function AbstractMultiscaleTransforms.make_workspace(
         sys::ShearletSystem, ::Type{T}, dims::Dims; flags::Integer = FFTW.MEASURE,
         tasks::Union{Integer, Nothing} = nothing, tune::Bool = false, prewarm::Bool = false
     ) where {T <: Number}
@@ -119,7 +119,7 @@ device, after the tuning.
 ws = make_workspace(system, CuArray{Float32}(undef, 256, 256); tune = true)
 ```
 """
-function MultiscaleTransformsBase.make_workspace(
+function AbstractMultiscaleTransforms.make_workspace(
         sys::ShearletSystem, x::AbstractArray; flags::Integer = FFTW.MEASURE,
         tasks::Union{Integer, Nothing} = nothing, tune::Bool = false, prewarm::Bool = false
     )
@@ -222,7 +222,7 @@ function _workspace(workspace, sys::ShearletSystem, dims::Tuple, ::Type{Td}, thr
     return check_workspace(workspace, sys, Td, dims)
 end
 
-MultiscaleTransformsBase.transform(ws::ShearletWorkspace) = ws.system
+AbstractMultiscaleTransforms.transform(ws::ShearletWorkspace) = ws.system
 Base.eltype(::Type{<:ShearletWorkspace{Td}}) where {Td} = Td
 Base.size(ws::ShearletWorkspace) = ws.dims
 

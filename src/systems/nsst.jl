@@ -127,7 +127,7 @@ _nsst_shears(d::Int) = 2^(d - 2)
 
 # The shearlets of a scale are the band-limited system's 2-D ones: cone 1 with
 # k ∈ -s:s, cone 2 with k ∈ 1-s:s-1, the seam shearlets glued across the cones.
-function MultiscaleTransformsBase.subband_layout(sys::NSSTShearlets, ::NTuple{2, Int})
+function AbstractMultiscaleTransforms.subband_layout(sys::NSSTShearlets, ::NTuple{2, Int})
     layout = [_lowpass_index(Val(2))]
     for (j, d) in enumerate(sys.direction_levels), (c, k, _) in _bl_scale_elements(Val(2), _nsst_shears(d))
         push!(layout, ShearletIndex{1}(j, c, k))
@@ -136,7 +136,7 @@ function MultiscaleTransformsBase.subband_layout(sys::NSSTShearlets, ::NTuple{2,
 end
 
 # Sizes of any integer type are converted; any other size is an error.
-function MultiscaleTransformsBase.subband_layout(sys::NSSTShearlets, dims::Tuple)
+function AbstractMultiscaleTransforms.subband_layout(sys::NSSTShearlets, dims::Tuple)
     dims isa Tuple{Vararg{Integer}} && !(dims isa Tuple{Vararg{Int}}) && return subband_layout(sys, map(Int, dims))
     throw(ArgumentError("the NSST supports 2-D data only, got size $(dims)"))
 end

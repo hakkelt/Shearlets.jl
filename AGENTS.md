@@ -24,11 +24,9 @@ Unlike the contourlet / surfacelet split, one package covers both dimensions:
 the cone-adapted construction is the same in 2-D and 3-D (two cones, three
 pyramids), with no lattice that only exists in the plane.
 
-The surface shared with the core: `FilterPair`, `CDF97`, the mask-bank engine
-(`MaskBankEngine`, `MaskBank`, `MaskItem`, `SparseMask`, `IdentityMask`, the
-forward/inverse and streaming entry points, `mask_bank_tune`), and the internals
-`data_eltype`, `loop_threaded`, `with_fftw_threads`, `nsp_responses` (the NSST
-pyramid) and `DEFAULT_CHUNK_SAMPLES`, imported in `src/Shearlets.jl`.
+The surface shared with the core is the `using MultiscaleFilterBanks:` block in
+`src/Shearlets.jl`: the filters, the mask-bank engine and a few internals
+(`nsp_responses` is the NSST pyramid).
 
 **Running the tests and the docs**:
 
@@ -45,7 +43,8 @@ read `[sources]`, run `julia --project=. dev/bootstrap.jl` once instead.
 
 - **Commit Message Formatting**: Conventional Commits, `type(scope): subject`,
   a blank line, then a detailed description (performance numbers or context).
-  Always append a co-author line referencing yourself.
+  End with an `Assisted-by: <agent name and version> <email>` trailer, not
+  `Co-Authored-By:`.
 - **Committing Changes**: ONLY commit code upon explicit instruction from the user.
 
 ## Structure
@@ -135,16 +134,15 @@ FFT. The pieces:
 - Self-contained `@testitem`s; each imports what it needs except `Shearlets` and
   `Test`. Seed every random input.
 - Tags: `:windows`, `:bandlimited`, `:nsst`, `:compact`, `:threed`, `:workspace`,
-  `:quality`, `:jet`, `:gpu`.
+  `:interface`, `:quality`, `:jet`, `:gpu`.
 - `julia --project=test test/runtests.jl :bandlimited,:nsst` filters by tag or
-  name. GPU items run on the SLURM `test` partition (`--gres=gpu:1`); on a host
-  without CUDA/AMDGPU they are vacuously true.
+  name. GPU items need a CUDA or AMDGPU device; on a host without one they are
+  vacuously true.
 - All generated output goes under `.temp/` (git-ignored).
 
 ## References
 
-Papers (and their extracted text) live in `/project/c_mrrecon/papers/shearlets/`:
-Häuser & Steidl (FFST, arXiv:1202.1773), Easley–Labate–Lim (ACHA 2008),
+Papers: Häuser & Steidl (FFST, arXiv:1202.1773), Easley–Labate–Lim (ACHA 2008),
 Kutyniok–Lim–Reisenhofer (ShearLab 3D, arXiv:1402.5670), Lim (IEEE TIP 2010,
 2013), Guo & Labate (MMNP 2013), Negi & Labate (IEEE TIP 2012), da Cunha–Zhou–Do
 (IEEE TIP 2006), Voigtlaender & Pein (α-shearlets, arXiv:1702.03559).

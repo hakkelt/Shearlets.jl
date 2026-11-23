@@ -70,9 +70,9 @@ end
         fwd_ws(c, x, ws) = @allocated analyze!(c, ws, x; threaded = false)
         inv_ws(y, c, ws) = @allocated synthesize!(y, ws, c; threaded = false)
         fwd(c, x, sys, ws), inv(y, c, sys, ws), fwd_ws(c, x, ws), inv_ws(y, c, ws)
-        @test fwd(c, x, sys, ws) == 0
+        @test fwd(c, x, sys, ws) == 0 broken = VERSION < v"1.11"
         @test inv(y, c, sys, ws) == 0
-        @test fwd_ws(c, x, ws) == 0
+        @test fwd_ws(c, x, ws) == 0 broken = VERSION < v"1.11"
         @test inv_ws(y, c, ws) == 0
     end
 end

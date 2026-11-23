@@ -1,0 +1,133 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="UTF-8"/><meta name="viewport" content="width=device-width, initial-scale=1.0"/><meta name="referrer" content="no-referrer"/><title>Examples · Shearlets.jl</title><meta name="title" content="Examples · Shearlets.jl"/><meta property="og:title" content="Examples · Shearlets.jl"/><meta property="twitter:title" content="Examples · Shearlets.jl"/><meta name="description" content="Documentation for Shearlets.jl."/><meta property="og:description" content="Documentation for Shearlets.jl."/><meta property="twitter:description" content="Documentation for Shearlets.jl."/><meta property="og:url" content="https://hakkelt.github.io/Shearlets.jl/examples/"/><meta property="twitter:url" content="https://hakkelt.github.io/Shearlets.jl/examples/"/><link rel="canonical" href="https://hakkelt.github.io/Shearlets.jl/examples/"/><script data-outdated-warner src="../assets/warner.js"></script><link href="https://cdnjs.cloudflare.com/ajax/libs/lato-font/3.0.0/css/lato-font.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/juliamono/0.63.2/juliamono.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/fontawesome.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/solid.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/brands.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.8/katex.min.css" rel="stylesheet" type="text/css"/><script>documenterBaseURL=".."</script><script src="https://cdnjs.cloudflare.com/ajax/libs/require.js/2.3.6/require.min.js" data-main="../assets/documenter.js"></script><script src="../search_index.js"></script><script src="../siteinfo.js"></script><script src="../../versions.js"></script><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../assets/themes/catppuccin-mocha.css" data-theme-name="catppuccin-mocha"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../assets/themes/catppuccin-macchiato.css" data-theme-name="catppuccin-macchiato"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../assets/themes/catppuccin-frappe.css" data-theme-name="catppuccin-frappe"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../assets/themes/catppuccin-latte.css" data-theme-name="catppuccin-latte"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../assets/themes/documenter-dark.css" data-theme-name="documenter-dark" data-theme-primary-dark/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../assets/themes/documenter-light.css" data-theme-name="documenter-light" data-theme-primary/><script src="../assets/themeswap.js"></script></head><body><div id="documenter"><nav class="docs-sidebar"><div class="docs-package-name"><span class="docs-autofit"><a href="../">Shearlets.jl</a></span></div><button class="docs-search-query input is-rounded is-small is-clickable my-2 mx-auto py-1 px-2" id="documenter-search-query">Search docs (Ctrl + /)</button><ul class="docs-menu"><li><a class="tocitem" href="../">Home</a></li><li><span class="tocitem">How-to guides</span><ul><li><a class="tocitem" href="../howto/">Common tasks</a></li><li><a class="tocitem" href="../howto_parameters/">Inspect responses and choose parameters</a></li><li class="is-active"><a class="tocitem" href>Examples</a><ul class="internal"><li><a class="tocitem" href="#The-coefficient-stack"><span>The coefficient stack</span></a></li><li><a class="tocitem" href="#Edges-of-different-orientations"><span>Edges of different orientations</span></a></li><li><a class="tocitem" href="#Directional-selectivity"><span>Directional selectivity</span></a></li><li><a class="tocitem" href="#Shift-invariance"><span>Shift invariance</span></a></li><li><a class="tocitem" href="#Denoising"><span>Denoising</span></a></li><li><a class="tocitem" href="#Volumes"><span>Volumes</span></a></li></ul></li></ul></li><li><a class="tocitem" href="../theory/">Explanation</a></li><li><a class="tocitem" href="../api/">Reference</a></li></ul><div class="docs-version-selector field has-addons"><div class="control"><span class="docs-label button is-static is-size-7">Version</span></div><div class="docs-selector control is-expanded"><div class="select is-fullwidth is-size-7"><select id="documenter-version-selector"></select></div></div></div></nav><div class="docs-main"><header class="docs-navbar"><a class="docs-sidebar-button docs-navbar-link fa-solid fa-bars is-hidden-desktop" id="documenter-sidebar-button" href="#"></a><nav class="breadcrumb"><ul class="is-hidden-mobile"><li><a class="is-disabled">How-to guides</a></li><li class="is-active"><a href>Examples</a></li></ul><ul class="is-hidden-tablet"><li class="is-active"><a href>Examples</a></li></ul></nav><div class="docs-right"><a class="docs-navbar-link" href="https://github.com/hakkelt/Shearlets.jl" title="View the repository on GitHub"><span class="docs-icon fa-brands"></span><span class="docs-label is-hidden-touch">GitHub</span></a><a class="docs-navbar-link" href="https://github.com/hakkelt/Shearlets.jl/blob/master/docs/src/examples.md" title="Edit source on GitHub"><span class="docs-icon fa-solid"></span></a><a class="docs-settings-button docs-navbar-link fa-solid fa-gear" id="documenter-settings-button" href="#" title="Settings"></a><a class="docs-article-toggle-button fa-solid fa-chevron-up" id="documenter-article-toggle-button" href="javascript:;" title="Collapse all docstrings"></a></div></header><article class="content" id="documenter-page"><h1 id="examples"><a class="docs-heading-anchor" href="#examples">Examples</a><a id="examples-1"></a><a class="docs-heading-anchor-permalink" href="#examples" title="Permalink"></a></h1><p>The experiments the shearlet papers use to show what the transform does, run with this package: the coefficient stack and a round trip (Häuser &amp; Steidl, Figs. 12 and 14), edges of different orientations (their Figs. 1 and 13), directional selectivity and shift invariance, image denoising (Easley, Labate &amp; Lim, Fig. 9; ShearLab 3D, Fig. 11), and a volume. The <a href="../theory/#theory">explanation</a> describes the constructions and lists the papers. Images are shown as images here: axis 1 (rows) runs downwards.</p><h2 id="The-coefficient-stack"><a class="docs-heading-anchor" href="#The-coefficient-stack">The coefficient stack</a><a id="The-coefficient-stack-1"></a><a class="docs-heading-anchor-permalink" href="#The-coefficient-stack" title="Permalink"></a></h2><p>The coefficients of an <code>n₁ × n₂</code> image are one <code>n₁ × n₂ × η</code> array, a subband per slice in the order of <code>subband_layout</code>; every subband has the size of the image. Häuser &amp; Steidl&#39;s <code>simple_example</code> shows an image, its coefficients for one shearlet, that shearlet, and the reconstruction:</p><pre><code class="language-julia hljs">x = Float64.(Gray.(testimage(&quot;cameraman&quot;)))
+sys = BandlimitedShearlets(scales = 4)
+c = analyze(sys, x)
+L = subband_layout(sys, size(x))
+i = findfirst(==(ShearletIndex{1}(3, 1, (-2,))), L)
+Ψ = shearlet_spectra(sys, size(x))
+ψ = fftshift(real(ifft(Ψ[:, :, i])))
+m = size(x, 1) ÷ 2 + 1
+xr = synthesize(sys, c)
+plot(showimg(x; title = &quot;original image&quot;), showcoef(c[:, :, i]; title = &quot;coefficients, scale 3, shear −2&quot;),
+    showcoef(ψ[(m - 24):(m + 24), (m - 24):(m + 24)]; title = &quot;that shearlet (zoomed)&quot;),
+    showimg(xr; title = &quot;reconstructed image&quot;); layout = (2, 2), size = (700, 720))</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi"><span class="sgr32"><span class="sgr1"> Downloading</span></span> artifact: images
+GKS: cannot open display - headless operation mode active</code></pre><p><img src="../ex_simple.png" alt/></p><pre><code class="language-julia hljs">size(c), maximum(abs, xr .- x), sum(abs2, c) / sum(abs2, x)   # Parseval: the energy is kept</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">((512, 512, 61), 1.1102230246251565e-15, 0.9999999999999998)</code></pre><h2 id="Edges-of-different-orientations"><a class="docs-heading-anchor" href="#Edges-of-different-orientations">Edges of different orientations</a><a id="Edges-of-different-orientations-1"></a><a class="docs-heading-anchor-permalink" href="#Edges-of-different-orientations" title="Permalink"></a></h2><p>A shearlet responds to an edge only when the edge runs along it, so the subbands of one scale sort the edges of an image by orientation. Häuser and Steidl&#39;s Fig. 1 shows this on geometric shapes: the sum of the coefficients over all shears of one scale traces every edge, while one shear picks out the edges of one orientation.</p><pre><code class="language-julia hljs">n = 256
+shapes = zeros(n, n)
+for i in 1:n, j in 1:n
+    diamond = abs(i - 70) + abs(j - 70) &lt; 45                 # a square rotated by 45°
+    disc = hypot(i - 70, j - 185) &lt; 40
+    half = hypot(i - 190, j - 100) &lt; 40 &amp;&amp; i &gt; 190           # a half disc …
+    square = abs(i - 175) &lt; 25 &amp;&amp; abs(j - 150) &lt; 25          # … next to a square
+    shapes[i, j] = diamond || disc || half || square
+end
+sys = BandlimitedShearlets(scales = 4)
+c = analyze(sys, shapes)
+L = subband_layout(sys, size(shapes))
+fine = [i for (i, l) in enumerate(L) if l.scale == 3]
+pick(k) = findfirst(==(ShearletIndex{1}(3, 1, (k,))), L)
+plot(showimg(shapes; title = &quot;shapes&quot;),
+    showimg(dropdims(sum(abs, c[:, :, fine]; dims = 3); dims = 3); title = &quot;Σ over shears of |c|, scale 3&quot;, color = :grays, clims = (0, 0.6)),
+    showimg(abs.(c[:, :, pick(-4)]); title = &quot;|c|, scale 3, cone 1, shear −4&quot;, color = :grays),
+    showimg(abs.(c[:, :, pick(0)]); title = &quot;|c|, scale 3, cone 1, shear 0&quot;, color = :grays);
+    layout = (2, 2), size = (700, 720))</code></pre><p><img src="../ex_edges.png" alt/></p><p>Cone 1 is the axis-1 cone: its shear-0 shearlets oscillate down the rows, so they see the horizontal edges of the square and the top and bottom of the disc. Shear <span>$-4$</span> of the 4 per side is a seam shearlet, at 45°: it sees two sides of the diamond and nothing of the square.</p><p>Their Fig. 13 condenses the coefficients into one number per subband, the mean magnitude <span>$d(i) = \frac{1}{n_1 n_2}\sum_{m}|c(m, i)|$</span>. Dashed lines separate the scales, the lowpass (off the scale) is on the left, and the red dots mark the diagonal (seam) shearlets. The mean falls from scale to scale, as it does for any piecewise constant image. Within a scale the values stay close: the disc gives every direction some edge, and the diamond and the square add the diagonal and the axis directions in similar amounts:</p><pre><code class="language-julia hljs">d = vec(mean(abs, c; dims = (1, 2)))
+p = bar(d; legend = false, ylims = (0, 1.1maximum(d[2:end])), xlabel = &quot;subband index i&quot;, ylabel = &quot;d(i)&quot;, size = (850, 280),
+    bottom_margin = 5Plots.mm, left_margin = 5Plots.mm, color = :steelblue, linecolor = :steelblue)
+for j in 1:4
+    vline!(p, [findfirst(l -&gt; l.scale == j, L) - 0.5]; ls = :dash, color = :black)
+end
+diag = [i for (i, l) in enumerate(L) if l.scale &gt; 0 &amp;&amp; abs(l.shear[1]) == 2^(l.scale - 1)]
+scatter!(p, diag, d[diag]; color = :red, markersize = 3)
+p</code></pre><p><img src="../ex_mean.png" alt/></p><h2 id="Directional-selectivity"><a class="docs-heading-anchor" href="#Directional-selectivity">Directional selectivity</a><a id="Directional-selectivity-1"></a><a class="docs-heading-anchor-permalink" href="#Directional-selectivity" title="Permalink"></a></h2><p>A plane wave shows where the subbands point: its energy should land in the subband whose direction is the wave&#39;s: cone 1 when <span>$|\omega_2| \le |\omega_1|$</span>, with shear <span>$k \approx -s\,\omega_2/\omega_1$</span> for <span>$s$</span> shears per side (the seam elements are listed under cone 1). Here, for waves at the finest scale of each system:</p><pre><code class="language-julia hljs">n = 256
+systems = [&quot;Bandlimited&quot; =&gt; BandlimitedShearlets(scales = 4), &quot;NSST&quot; =&gt; NSSTShearlets(),
+    &quot;Compact&quot; =&gt; CompactShearlets()]
+@printf(&quot;%6s  %-12s&quot;, &quot;angle&quot;, &quot;(f₁, f₂)&quot;)
+foreach(s -&gt; @printf(&quot;  %-22s&quot;, first(s)), systems); println()
+for θ in 0:15:165
+    # On the square ‖f‖∞ = 90, inside the finest scale of every system.
+    f₁, f₂ = round.(Int, 90 .* (cosd(θ), sind(θ)) ./ max(abs(cosd(θ)), abs(sind(θ))))
+    wave = [cos(2π * (f₁ * i + f₂ * j) / n) for i in 0:(n - 1), j in 0:(n - 1)]
+    @printf(&quot;%5d°  %-12s&quot;, θ, (f₁, f₂))
+    for (_, sys) in systems
+        cw = analyze(sys, wave)
+        l = subband_layout(sys, (n, n))[argmax(vec(sum(abs2, cw; dims = (1, 2))))]
+        @printf(&quot;  scale %d cone %d k = %-3d&quot;, l.scale, l.cone, l.shear[1])
+    end
+    println()
+end</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi"> angle  (f₁, f₂)      Bandlimited             NSST                    Compact
+    0°  (90, 0)       scale 4 cone 1 k = 0    scale 4 cone 1 k = 0    scale 4 cone 1 k = 0
+   15°  (90, 24)      scale 4 cone 1 k = -2   scale 4 cone 1 k = -1   scale 4 cone 1 k = -1
+   30°  (90, 52)      scale 4 cone 1 k = -5   scale 4 cone 1 k = -2   scale 4 cone 1 k = -2
+   45°  (90, 90)      scale 4 cone 1 k = -8   scale 4 cone 1 k = -4   scale 4 cone 1 k = -4
+   60°  (52, 90)      scale 4 cone 2 k = -5   scale 4 cone 2 k = -2   scale 4 cone 2 k = -2
+   75°  (24, 90)      scale 4 cone 2 k = -2   scale 4 cone 2 k = -1   scale 4 cone 2 k = -1
+   90°  (0, 90)       scale 4 cone 2 k = 0    scale 4 cone 2 k = 0    scale 4 cone 2 k = 0
+  105°  (-24, 90)     scale 4 cone 2 k = 2    scale 4 cone 2 k = 1    scale 4 cone 2 k = 1
+  120°  (-52, 90)     scale 4 cone 2 k = 5    scale 4 cone 2 k = 2    scale 4 cone 2 k = 2
+  135°  (-90, 90)     scale 4 cone 1 k = 8    scale 4 cone 1 k = 4    scale 4 cone 1 k = 4
+  150°  (-90, 52)     scale 4 cone 1 k = 5    scale 4 cone 1 k = 2    scale 4 cone 1 k = 2
+  165°  (-90, 24)     scale 4 cone 1 k = 2    scale 4 cone 1 k = 1    scale 4 cone 1 k = 1</code></pre><p>Each system puts every wave in its finest scale and, as the shear convention predicts, at shear <span>$k \approx -s \tan\theta$</span> in cone 1 for <span>$|\theta| \le 45°$</span> and <span>$k \approx -s \cot\theta$</span> in cone 2 otherwise (<span>$s = 8$</span> shears per side for the band-limited system at scale 4, <span>$s = 4$</span> for the other two). At 45° and 135° the seam elements (<span>$|k| = s$</span>) take the wave, listed under cone 1. The waves lie on the square <span>$\lVert f\rVert_\infty = 90$</span> because the scales of all three systems are bands of <span>$\lVert\omega\rVert_\infty$</span>.</p><h2 id="Shift-invariance"><a class="docs-heading-anchor" href="#Shift-invariance">Shift invariance</a><a id="Shift-invariance-1"></a><a class="docs-heading-anchor-permalink" href="#Shift-invariance" title="Permalink"></a></h2><p>No subband is decimated, so a circular shift of the image shifts every subband by the same amount, exactly:</p><pre><code class="language-julia hljs">x = Float64.(Gray.(testimage(&quot;cameraman&quot;)))
+for (name, sys) in systems
+    c0 = analyze(sys, x)
+    cs = analyze(sys, circshift(x, (5, -7)))
+    @printf(&quot;%-12s max |T(shift x) − shift(T x)| = %.1e\n&quot;, name, maximum(abs, cs .- circshift(c0, (5, -7, 0))))
+end</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">Bandlimited  max |T(shift x) − shift(T x)| = 3.3e-16
+NSST         max |T(shift x) − shift(T x)| = 6.7e-16
+Compact      max |T(shift x) − shift(T x)| = 5.6e-16</code></pre><h2 id="Denoising"><a class="docs-heading-anchor" href="#Denoising">Denoising</a><a id="Denoising-1"></a><a class="docs-heading-anchor-permalink" href="#Denoising" title="Permalink"></a></h2><p>The classical experiment of the shearlet papers (Easley, Labate &amp; Lim, Fig. 9; ShearLab 3D, Fig. 11; Lim, Fig. 11): add white Gaussian noise of standard deviation <span>$\sigma$</span> to an image, hard-threshold the coefficients, and reconstruct. The noise in subband <span>$i$</span> has standard deviation <span>$\sigma_i = \sigma\,\lVert\psi_i\rVert_2$</span>, which the spectra give exactly (<span>$\lVert\psi_i\rVert_2^2$</span> is the mean of <span>$|\hat\psi_i|^2$</span> over the grid), so a coefficient is kept when it exceeds <span>$\lambda\sigma_i$</span>. <span>$\lambda = 3$</span>, and 4 on the finest scale, where the noise dominates; the lowpass is kept. A workspace holds each system&#39;s masks and FFT plans, so the forward and inverse transforms do not rebuild them:</p><pre><code class="language-julia hljs">function denoise(noisy, sys, σ; ws = make_workspace(sys, Float64, size(noisy)))
+    L = subband_layout(sys, size(noisy))
+    Ψ = shearlet_spectra(sys, size(noisy))
+    J = maximum(l -&gt; l.scale, L)
+    c = analyze(sys, noisy; workspace = ws)
+    for (i, l) in enumerate(L)
+        islowpass(l) &amp;&amp; continue
+        λ = (l.scale == J ? 4 : 3) * σ * sqrt(mean(abs2, view(Ψ, :, :, i)))
+        b = view(c, :, :, i)
+        b .= ifelse.(abs.(b) .&gt;= λ, b, 0.0)
+    end
+    return synthesize(sys, c; workspace = ws)
+end
+
+x = 255 .* Float64.(Gray.(testimage(&quot;cameraman&quot;)))
+Random.seed!(42)
+σ = 30
+noisy = x .+ σ .* randn(size(x))
+results = [name =&gt; denoise(noisy, sys, σ) for (name, sys) in systems]
+@printf(&quot;noisy: %.2f dB\n&quot;, psnr(x, noisy))
+for (name, y) in results
+    @printf(&quot;%-12s %.2f dB\n&quot;, name, psnr(x, y))
+end</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">noisy: 18.59 dB
+Bandlimited  29.21 dB
+NSST         29.85 dB
+Compact      30.53 dB</code></pre><pre><code class="language-julia hljs">crop = (1:256, 129:384)
+panels = [showimg(view(x, crop...); title = &quot;original&quot;, clims = (0, 255)),
+    showimg(view(noisy, crop...); title = @sprintf(&quot;noisy, %.2f dB&quot;, psnr(x, noisy)), clims = (0, 255))]
+for (name, y) in results
+    push!(panels, showimg(view(y, crop...); title = @sprintf(&quot;%s, %.2f dB&quot;, name, psnr(x, y)), clims = (0, 255)))
+end
+plot(panels...; layout = (2, 3), size = (900, 620))</code></pre><p><img src="../ex_denoise.png" alt/></p><p>Over a range of noise levels:</p><pre><code class="language-julia hljs">@printf(&quot;%5s %8s&quot;, &quot;σ&quot;, &quot;noisy&quot;); foreach(s -&gt; @printf(&quot; %12s&quot;, first(s)), systems); println()
+for σ in (10, 20, 30, 40)
+    Random.seed!(1)
+    y = x .+ σ .* randn(size(x))
+    @printf(&quot;%5d %8.2f&quot;, σ, psnr(x, y))
+    foreach(((_, sys),) -&gt; @printf(&quot; %12.2f&quot;, psnr(x, denoise(y, sys, σ))), systems)
+    println()
+end</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">    σ    noisy  Bandlimited         NSST      Compact
+   10    28.13        34.53        35.19        36.00
+   20    22.11        31.12        31.69        32.41
+   30    18.59        29.22        29.75        30.48
+   40    16.09        27.94        28.39        29.14</code></pre><p>Plain hard thresholding is the simplest estimator; the papers&#39; numbers come from it or from refinements of it (e.g. thresholds per scale tuned on test images), so they are comparable in trend only.</p><h2 id="Volumes"><a class="docs-heading-anchor" href="#Volumes">Volumes</a><a id="Volumes-1"></a><a class="docs-heading-anchor-permalink" href="#Volumes" title="Permalink"></a></h2><p>On 3-D data the band-limited and compact systems split the frequency cube into the three pyramids around the axes; a 3-D shearlet is a plate, and it responds to surfaces through the volume along its orientation. The streaming form of the transform hands over one subband at a time, so a statistic of the coefficients needs no room for all of them. Below, a ball in a <code>64³</code> volume: the central slice of the volume, of the summed finest-scale magnitudes, and of the unsheared finest-scale subbands of cones 1 and 3:</p><pre><code class="language-julia hljs">n = 64
+ball = [Float64(hypot(i - 32, j - 32, k - 32) &lt; 18) for i in 1:n, j in 1:n, k in 1:n]
+sys3 = BandlimitedShearlets(scales = 2)
+L3 = subband_layout(sys3, size(ball))
+total = zeros(n, n, n)
+axis1 = findfirst(==(ShearletIndex{2}(2, 1, (0, 0))), L3)
+axis3 = findfirst(==(ShearletIndex{2}(2, 3, (0, 0))), L3)
+picked = Dict{Int, Array{Float64, 3}}()
+analyze(sys3, ball) do i, band
+    L3[i].scale == 2 &amp;&amp; (total .+= abs.(band))
+    i in (axis1, axis3) &amp;&amp; (picked[i] = copy(band))
+end
+plot(showimg(ball[:, :, 32]; title = &quot;ball, x₃ = 32&quot;),
+    showimg(total[:, :, 32]; title = &quot;Σ |c|, scale 2, x₃ = 32&quot;),
+    showcoef(picked[axis1][:, :, 32]; title = &quot;cone 1, x₃ = 32&quot;),
+    showcoef(picked[axis3][:, 32, :]; title = &quot;cone 3, x₂ = 32&quot;);
+    layout = (1, 4), size = (1000, 270), titlefontsize = 10)</code></pre><p><img src="../ex_volume.png" alt/></p><pre><code class="language-julia hljs">length(L3), [count(l -&gt; l.scale == j, L3) for j in 1:2]</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">(63, [13, 49])</code></pre><p>The axis-1 subband sees the caps of the ball where its surface is normal to axis 1, and the axis-3 subband those normal to axis 3 (shown in a slice through axis 3).</p></article><nav class="docs-footer"><a class="docs-footer-prevpage" href="../howto_parameters/">« Inspect responses and choose parameters</a><a class="docs-footer-nextpage" href="../theory/">Explanation »</a><div class="flexbox-break"></div><p class="footer-message">Powered by <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> and the <a href="https://julialang.org/">Julia Programming Language</a>.</p></nav></div><div class="modal" id="documenter-settings"><div class="modal-background"></div><div class="modal-card"><header class="modal-card-head"><p class="modal-card-title">Settings</p><button class="delete"></button></header><section class="modal-card-body"><p><label class="label">Theme</label><div class="select"><select id="documenter-themepicker"><option value="auto">Automatic (OS)</option><option value="documenter-light">documenter-light</option><option value="documenter-dark">documenter-dark</option><option value="catppuccin-latte">catppuccin-latte</option><option value="catppuccin-frappe">catppuccin-frappe</option><option value="catppuccin-macchiato">catppuccin-macchiato</option><option value="catppuccin-mocha">catppuccin-mocha</option></select></div></p><hr/><p>This document was generated with <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> version 1.20.0 on <span class="colophon-date" title="Monday 23 November 2026 22:09">Monday 23 November 2026</span>. Using Julia version 1.13.4.</p></section><footer class="modal-card-foot"></footer></div></div></div></body></html>
